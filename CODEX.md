@@ -1,0 +1,49 @@
+# SovereignLoop: canonical product truth
+
+## Mission
+
+Keep enterprise context, policy, memory, evaluations, and learning inside the customer boundary
+while making frontier models replaceable compute suppliers.
+
+## Product claim
+
+SovereignLoop is a customer-owned AI egress control plane. It reduces disclosure through
+deterministic blocking, minimization, request-scoped surrogates, local-only routing, and
+content-free evidence.
+
+It is not a VPN, an anonymity guarantee, a DLP replacement, a compliance certificate, or proof that
+a model provider forgot data. Inference requests do not directly update model weights; provider
+logging, retention, safety review, later training, and commercial learning are separate risks
+governed by product behavior and contract.
+
+## Current state
+
+Built: text-only OpenAI-compatible gateway, deterministic classification, policy engine,
+local/remote routing, OpenAI and Anthropic adapters, local recomposition, content-free receipts,
+tests, synthetic evals, CI, and hardened deployment examples.
+
+Not built: probabilistic NER, identity federation, tenant administration, persistent evidence
+export, HSM signing, multimodal inspection, tools, streaming, cross-provider decomposition,
+provider-control verification, hardware appliance, or third-party certification.
+
+## Non-negotiable rules
+
+1. Never log or persist raw prompt, response, surrogate map, provider key, or client key.
+2. Fail closed when a provider, model, data class, or API feature is not explicitly approved.
+3. Never claim zero retention solely because `store=false` was sent.
+4. Never claim certification. Say control-aligned or readiness evidence only.
+5. Do not add a dependency where a reviewed platform primitive is sufficient.
+6. Every new input modality, tool, streaming path, memory store, and provider is a new threat
+   boundary requiring tests and documentation.
+7. Preserve the OpenAI-compatible ingress unless a versioned breaking change is approved.
+
+## Release gates
+
+- Formatting, lint, type checking, tests, CodeQL, dependency review, and vulnerability audit pass.
+- No high-severity exact secret leaves the policy layer in the evaluation corpus.
+- Classifier and decision accuracy are at least 95% on the versioned evaluation set.
+- No raw content appears in logs, metrics, errors, or receipts.
+- Container runs as non-root with read-only root filesystem, dropped capabilities, seccomp, explicit
+  egress, and no service-account token.
+- SBOM and SLSA provenance accompany release artifacts.
+- CISO-facing documentation matches demonstrated behavior.

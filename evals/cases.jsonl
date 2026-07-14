@@ -1,0 +1,12 @@
+{"id":"legal-001","scenario":"outside counsel email","prompt":"Send the draft to partner@example.com before close.","expectedKinds":["email"],"expectedDecision":"transform"}
+{"id":"finance-001","scenario":"payment card pasted into assistant","prompt":"Reconcile card 4111 1111 1111 1111 against the invoice.","expectedKinds":["credit_card"],"expectedDecision":"deny"}
+{"id":"engineering-001","scenario":"API credential in debugging prompt","prompt":"Debug this token: sk-proj-abcdefghijklmnopqrstuvwxyz123456","expectedKinds":["api_secret"],"expectedDecision":"deny"}
+{"id":"engineering-002","scenario":"private key in incident response","prompt":"The exposed value is -----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----","expectedKinds":["private_key"],"expectedDecision":"deny"}
+{"id":"hr-001","scenario":"US employee identifier","prompt":"Update the record for SSN 078-05-1120.","expectedKinds":["ssn"],"expectedDecision":"deny"}
+{"id":"treasury-001","scenario":"international bank account","prompt":"Prepare a transfer to GB82WEST12345698765432.","expectedKinds":["iban"],"expectedDecision":"transform"}
+{"id":"network-001","scenario":"internal host troubleshooting","prompt":"Why can 10.1.2.3 not reach the service?","expectedKinds":["ipv4"],"expectedDecision":"transform"}
+{"id":"ma-001","scenario":"confidential acquisition","prompt":"Summarize diligence risks for Example Acquisition Target.","expectedKinds":["confidential_term"],"expectedDecision":"local_only"}
+{"id":"strategy-001","scenario":"confidential initiative","prompt":"Draft the board update for Project Nightingale.","expectedKinds":["confidential_term"],"expectedDecision":"local_only"}
+{"id":"general-001","scenario":"clean generic query","prompt":"Explain the difference between revenue and cash flow.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-001","scenario":"invalid card-like digits","prompt":"The reference sequence is 1234 5678 9012 3456.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-002","scenario":"invalid network address","prompt":"The fictional address is 999.999.999.999.","expectedKinds":[],"expectedDecision":"deny"}

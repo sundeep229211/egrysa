@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sovereignloop
+  labels:
+    app.kubernetes.io/name: sovereignloop
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sovereignloop
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sovereignloop
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: ghcr.io/replace-with-org/sovereignloop:0.1.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - run
+            - --frozen
+            - --cached-only
+            - --no-prompt
+            - --allow-read=/app/config
+            - --allow-env=SOVEREIGNLOOP_CONFIG,SOVEREIGNLOOP_INBOUND_KEYS,SOVEREIGNLOOP_RECEIPT_HMAC_KEY,OPENAI_API_KEY
+            - --allow-net=0.0.0.0:8787,api.openai.com
+            - /app/src/main.ts
+          env:
+            - name: SOVEREIGNLOOP_CONFIG
+              value: /app/config/sovereignloop.json
+            - name: SOVEREIGNLOOP_INBOUND_KEYS
+              valueFrom:
+                secretKeyRef: { name: sovereignloop-secrets, key: inbound-keys }
+            - name: SOVEREIGNLOOP_RECEIPT_HMAC_KEY
+              valueFrom:
+                secretKeyRef: { name: sovereignloop-secrets, key: receipt-hmac-key }
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef: { name: sovereignloop-secrets, key: openai-api-key }
+          ports:
+            - { name: http, containerPort: 8787, protocol: TCP }
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - { name: config, mountPath: /app/config, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: config
+          configMap: { name: sovereignloop-config }
+        - name: tmp
+          emptyDir: { medium: Memory, sizeLimit: 16Mi }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: sovereignloop

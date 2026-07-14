@@ -1,0 +1,9 @@
+.git
+.github
+.env*
+!.env.example
+artifacts
+coverage
+dist
+docs
+tests

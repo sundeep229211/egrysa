@@ -1,0 +1,43 @@
+{
+  "listen": { "hostname": "127.0.0.1", "port": 8787 },
+  "maxRequestBytes": 1048576,
+  "requestTimeoutMs": 60000,
+  "receiptCapacity": 10000,
+  "providers": [
+    {
+      "id": "openai",
+      "kind": "openai",
+      "baseUrl": "https://api.openai.com",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "allowedModels": ["gpt-5.6-luna", "gpt-5.4-mini"],
+      "dataPolicy": { "training": "disabled", "retention": "standard", "allowRaw": false }
+    },
+    {
+      "id": "anthropic",
+      "kind": "anthropic",
+      "baseUrl": "https://api.anthropic.com",
+      "apiKeyEnv": "ANTHROPIC_API_KEY",
+      "allowedModels": ["claude-sonnet-5"],
+      "dataPolicy": { "training": "disabled", "retention": "standard", "allowRaw": false }
+    },
+    {
+      "id": "local",
+      "kind": "openai-compatible",
+      "baseUrl": "http://localhost:11434/v1",
+      "allowedModels": ["gpt-oss:20b"],
+      "local": true,
+      "dataPolicy": { "training": "unknown", "retention": "none", "allowRaw": true }
+    }
+  ],
+  "policy": {
+    "defaultProvider": "openai",
+    "localProvider": "local",
+    "blockKinds": ["credit_card", "private_key", "api_secret", "ssn"],
+    "localOnlyKinds": ["confidential_term"],
+    "transformKinds": ["email", "phone", "ipv4", "iban"],
+    "sensitiveTerms": [
+      { "term": "Project Nightingale", "label": "initiative" },
+      { "term": "Example Acquisition Target", "label": "organization" }
+    ]
+  }
+}
