@@ -29,7 +29,8 @@ The score is not a compliance or security rating and should not be quoted as an 
 
 ## Tagged-release blockers
 
-1. Merge the reviewed data-plane change and pass fresh public CI from protected `main`.
+1. Merge the reviewed data-plane change through protected `main`. Fresh public pull-request CI
+   passed at signed implementation commit `7a39efb8006d4f77c2ca15864367eef6e927db3d`.
 2. Verify the private vulnerability reporting workflow from a non-maintainer account.
 3. From protected `main`, verify the tagged workflow's immutable registry digest, vulnerability
    result, CycloneDX SBOM attestation, signature, and provenance before announcing a release.
@@ -69,9 +70,11 @@ earlier commit, not verification of the current workspace.
   deletion behavior or exercise the full policy-gateway path.
 - Commits `d7af06e` and `6119e27` were signed with the configured SSH signing key and reported as
   verified by GitHub.
-- The current workspace passed formatting, linting, type checks, 24 tests, 48/48 synthetic
-  evaluations, and standalone compilation. The broader clean-clone, vulnerability, container, and
-  loopback evidence must be refreshed after these changes are committed.
+- Signed implementation commit `7a39efb8006d4f77c2ca15864367eef6e927db3d` passed public pull-request
+  CI, including formatting, linting, type checks, 24 tests, 48/48 synthetic evaluations, standalone
+  compilation, dependency review, the security baseline, and CodeQL. The current container and
+  Kubernetes runtime evidence is recorded above; registry signature, attestation, and provenance
+  remain tag-only evidence.
 - The final documentation-link review returned HTTP 200 for all 17 external links, and the exact
   namespace refresh found no obvious npm, PyPI, Docker Hub repository, or general software-search
   collision. The crates.io check was inconclusive and no legal-clearance claim is made.
@@ -104,6 +107,11 @@ earlier commit, not verification of the current workspace.
   [`29416315398`](https://github.com/sundeep229211/egrysa/actions/runs/29416315398) passed
   `Test and audit`, `Security baseline`, `Dependency review`, and `CodeQL` at signed commit
   `0ad74a689f921a319aa41a0abff7765c5a8dbebc`.
+- Public pull request #6 CI run
+  [`29430794938`](https://github.com/sundeep229211/egrysa/actions/runs/29430794938) passed
+  `Test and audit`, `Security baseline`, `Dependency review`, and `CodeQL` for the streaming, tools,
+  detector, and durable-receipt implementation at signed commit
+  `7a39efb8006d4f77c2ca15864367eef6e927db3d`.
 
 ## Not blockers for the public alpha
 

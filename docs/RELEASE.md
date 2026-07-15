@@ -10,9 +10,10 @@
 - GitHub private vulnerability reporting is enabled and tested.
 - The tag is annotated and signed by an authorized maintainer.
 
-These controls are enabled on the public repository, and the current workspace has fresh local
-runtime evidence. Do not create the first tag until the reviewed change passes protected public CI
-and private vulnerability reporting has been tested from a non-maintainer account.
+These controls are enabled on the public repository, and the reviewed implementation has fresh local
+runtime evidence plus passing public pull-request CI. Do not create the first tag until the change
+is merged through protected `main` and private vulnerability reporting has been tested from a
+non-maintainer account.
 
 ## Private no-payment staging
 
