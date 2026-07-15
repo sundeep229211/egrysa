@@ -14,15 +14,15 @@ workflows.
 
 ## Scorecard
 
-| Area                               | Score | Evidence                                                                                                                            | Main gap                                                                                          |
-| ---------------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Security boundary                  |  8/10 | Fail-closed taxonomy; strict request field surface; local-only endpoint enforcement; authenticated metrics; keyed receipts          | Deterministic detection remains incomplete; bearer auth and software-held keys are alpha controls |
-| Code and local verification        |  8/10 | Strict TypeScript; 15 tests pass; 12/12 synthetic eval decisions/findings; no known audited vulnerabilities; standalone compilation | Small, implementation-authored corpus; no load or independent adversarial test                    |
-| Documentation and claim discipline |  9/10 | CISO brief, threat model, architecture, compliance crosswalk, operations, release, support, research, and explicit non-claims       | External reviewer has not yet performed a clean-room install or claim audit                       |
-| Supply chain and release           |  8/10 | Pinned actions; local image build/run; zero high/critical scan result; local CycloneDX SBOM; signing and provenance workflow        | No registry digest, release signature, registry SBOM attestation, or provenance has been verified |
-| Open-source governance             |  8/10 | Private GitHub repository, Apache-2.0, governance documents, issue forms, Dependabot alerts, and private-reporting policy           | Native CodeQL, dependency review, private reporting, and branch rules await public cutover        |
-| Name and legal                     |  7/10 | Egrysa selected; preliminary screen and exact namespace refresh retained; founder reports external legal screening complete         | Legal work is not reproduced here; crates.io check was inconclusive; recheck at cutover           |
-| Enterprise production              |  4/10 | Hardened single-node baseline and explicit responsibility model                                                                     | No OIDC, HA evidence, durable receipts, KMS/HSM, SIEM, pen test, SLO, DR, or certification scope  |
+| Area                               | Score | Evidence                                                                                                                            | Main gap                                                                                                            |
+| ---------------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Security boundary                  |  8/10 | Fail-closed taxonomy; strict request field surface; local-only endpoint enforcement; authenticated metrics; keyed receipts          | Deterministic detection remains incomplete; bearer auth and software-held keys are alpha controls                   |
+| Code and local verification        |  8/10 | Strict TypeScript; 15 tests pass; 12/12 synthetic eval decisions/findings; no known audited vulnerabilities; standalone compilation | Small, implementation-authored corpus; no load or independent adversarial test                                      |
+| Documentation and claim discipline |  9/10 | CISO brief, threat model, architecture, compliance crosswalk, operations, release, support, research, and explicit non-claims       | External reviewer has not yet performed a clean-room install or claim audit                                         |
+| Supply chain and release           |  8/10 | Pinned actions; private dry-run build; Debian-vendor high/critical gate passed; 11-component CycloneDX SBOM; release workflow       | Fourteen SBOM advisories need recorded triage; registry signature, attestation, and provenance await the public tag |
+| Open-source governance             |  8/10 | Private GitHub repository, Apache-2.0, governance documents, issue forms, Dependabot alerts, and private-reporting policy           | Native CodeQL, dependency review, private reporting, and branch rules await public cutover                          |
+| Name and legal                     |  7/10 | Egrysa selected; preliminary screen and exact namespace refresh retained; founder reports external legal screening complete         | Legal work is not reproduced here; crates.io check was inconclusive; recheck at cutover                             |
+| Enterprise production              |  4/10 | Hardened single-node baseline and explicit responsibility model                                                                     | No OIDC, HA evidence, durable receipts, KMS/HSM, SIEM, pen test, SLO, DR, or certification scope                    |
 
 **Overall:** 7.5/10 for a public alpha source release; 4/10 for production enterprise use.
 
@@ -32,11 +32,14 @@ The score is not a compliance or security rating and should not be quoted as an 
 
 1. Obtain clean private CI from the independent security baseline and exercise the non-publishing
    release dry run. Native CodeQL and dependency review remain mandatory at public cutover.
-2. Complete one authorized remote-provider generation when working quota is available. The key was
+2. Triage the 14 SBOM advisories before the public tag. The vendor-prioritized Trivy scan of the
+   Debian image selected no high or critical findings, while alternative sources assign higher
+   ratings to some entries; a passing gate is not a no-vulnerability claim.
+3. Complete one authorized remote-provider generation when working quota is available. The key was
    accepted, but the provider returned `insufficient_quota`; no billing change is authorized.
-3. After explicit publication approval, enable free public branch protection, CodeQL, dependency
+4. After explicit publication approval, enable free public branch protection, CodeQL, dependency
    review, secret scanning, push protection, and private vulnerability reporting; then rerun CI.
-4. From protected `main`, verify the public tagged workflow's immutable registry digest,
+5. From protected `main`, verify the public tagged workflow's immutable registry digest,
    vulnerability result, CycloneDX SBOM attestation, signature, and provenance before announcing a
    release.
 
@@ -59,6 +62,14 @@ The score is not a compliance or security rating and should not be quoted as an 
 - The final documentation-link review returned HTTP 200 for all 17 external links, and the exact
   namespace refresh found no obvious npm, PyPI, Docker Hub repository, or general software-search
   collision. The crates.io check was inconclusive and no legal-clearance claim is made.
+- Private release dry run `29397265834` passed source verification, image build, the Debian-vendor
+  high/critical Trivy gate, and CycloneDX generation without publishing an image. The retained
+  artifact digest is `sha256:6f20f944340a6a5aa8764a1fddbec57a4b7299e5ff94d156529859886581c089`; the
+  extracted SBOM file digest is
+  `sha256:1cc84bb53b686f7e1c953322acc929dc2690c0b90bd2008467acbda282511a15`.
+- The dry-run SBOM contains 11 components and 14 advisories. The vendor-prioritized scan selected no
+  high or critical findings, while some alternative rating sources include high or critical scores.
+  This is residual triage evidence, not a claim that the image has no known vulnerabilities.
 
 ## Not blockers for the public alpha
 

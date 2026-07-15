@@ -13,7 +13,7 @@ later gate cannot compensate for a failed earlier one.
 | Policy configuration rejects missing, duplicate, and unknown data classes            | Implemented and tested                                                |
 | Receipts contain no raw-content digest usable for offline guessing                   | Keyed, nonce-bound fingerprint implemented and tested                 |
 | Process-local receipt chain cannot be deployed as false multi-replica evidence       | Deployment fixed at one replica; limitation documented                |
-| Tagged release cannot bypass tests, audit, image scan, SBOM, provenance, and signing | Workflow implemented; non-publishing private dry-run path added       |
+| Tagged release cannot bypass tests, audit, image scan, SBOM, provenance, and signing | Private dry run `29397265834` passed; public signing remains pending  |
 | Deployment image is immutable                                                        | Digest placeholder fails closed until the release digest is supplied  |
 | Private vulnerability reporting has a monitored route                                | Policy written; GitHub setting unavailable for the private repository |
 | No repository secret, personal local file, or invalid release identity               | Signed commits verified; current diff and history secret scans pass   |

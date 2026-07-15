@@ -22,6 +22,10 @@ The private dry run is staging evidence, not a release substitute. The immutable
 Sigstore signature, registry SBOM attestation, and GitHub build provenance are verified only from
 the public tagged workflow.
 
+Passing the high/critical gate is not a no-vulnerability claim. Retain the complete SBOM and record
+the disposition of every advisory, including findings whose selected vendor severity is below the
+blocking threshold or whose alternative-source rating is higher.
+
 ## Automated evidence
 
 A `v*` tag on `main` triggers verification, builds a local candidate image, blocks on high or
