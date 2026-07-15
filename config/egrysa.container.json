@@ -3,6 +3,8 @@
   "maxRequestBytes": 1048576,
   "requestTimeoutMs": 60000,
   "receiptCapacity": 10000,
+  "receiptLogPath": "/var/lib/egrysa/receipts.jsonl",
+  "receiptChainId": "egrysa-container-alpha",
   "providers": [
     {
       "id": "openai",

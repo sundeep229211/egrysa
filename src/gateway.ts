@@ -1,10 +1,11 @@
 import { InboundAuth } from "./auth.ts";
-import { classify } from "./classifier.ts";
+import { inspectChat, transformChat } from "./chat.ts";
 import { Metrics } from "./metrics.ts";
 import { decide } from "./policy.ts";
-import { cloneMessages, invokeProvider, mapResponseContent, ProviderError } from "./providers.ts";
+import { invokeProvider, mapResponseContent, ProviderError } from "./providers.ts";
 import { ReceiptStore } from "./receipts.ts";
-import { recompose, transform } from "./surrogate.ts";
+import { recomposeOpenAiStream, RecompositionError } from "./streaming.ts";
+import { recomposeChecked } from "./surrogate.ts";
 import type { AppConfig, ChatRequest } from "./types.ts";
 
 export class Gateway {
@@ -17,11 +18,17 @@ export class Gateway {
   ) {}
 
   static async create(config: AppConfig): Promise<Gateway> {
-    const receiptKey = Deno.env.get("EGRYSA_RECEIPT_HMAC_KEY") ?? "";
     return new Gateway(
       config,
       await InboundAuth.fromEnvironment(),
-      new ReceiptStore(receiptKey, config.receiptCapacity),
+      await ReceiptStore.open({
+        fingerprintKey: Deno.env.get("EGRYSA_RECEIPT_FINGERPRINT_KEY") ?? "",
+        privateKeyPkcs8: Deno.env.get("EGRYSA_RECEIPT_ED25519_PRIVATE_KEY") ?? "",
+        publicKeySpki: Deno.env.get("EGRYSA_RECEIPT_ED25519_PUBLIC_KEY") ?? "",
+        chainId: config.receiptChainId,
+        logPath: config.receiptLogPath,
+        capacity: config.receiptCapacity,
+      }),
     );
   }
 
@@ -31,7 +38,8 @@ export class Gateway {
     if (request.method === "GET" && url.pathname === "/readyz") {
       return json({ status: "ready" });
     }
-    if (!await this.auth.authorize(request.headers.get("authorization"))) {
+    const auth = await this.auth.authorize(request.headers.get("authorization"));
+    if (!auth) {
       return problem(401, "unauthorized", "A valid gateway bearer token is required.");
     }
     if (request.method === "GET" && url.pathname === "/metrics") {
@@ -40,34 +48,37 @@ export class Gateway {
       });
     }
     if (request.method === "GET" && url.pathname.startsWith("/v1/receipts/")) {
+      if (url.pathname === "/v1/receipts/checkpoint") return json(await this.receipts.checkpoint());
+      if (url.pathname === "/v1/receipts/public-key") return json(this.receipts.publicKeyInfo());
       const receipt = this.receipts.get(url.pathname.slice("/v1/receipts/".length));
       return receipt ? json(receipt) : problem(404, "not_found", "Receipt not found.");
     }
+    if (request.method === "GET" && url.pathname === "/v1/models") return this.models();
     if (request.method !== "POST" || url.pathname !== "/v1/chat/completions") {
       return problem(404, "not_found", "Route not found.");
     }
-    return await this.chat(request);
+    return await this.chat(request, auth.workloadId);
   }
 
-  private async chat(request: Request): Promise<Response> {
+  private async chat(request: Request, workloadId: string): Promise<Response> {
     this.metrics.requests++;
     this.metrics.inFlight++;
+    let receiptId: string | undefined;
     try {
       const body = await readJson(request, this.config.maxRequestBytes);
       const validation = validateChat(body);
       if (validation) return problem(422, "unsupported_request", validation);
       const chat = body as ChatRequest;
       const originalJson = JSON.stringify(chat);
-      const findingsByMessage = chat.messages.map((message) =>
-        classify(message.content, this.config)
-      );
-      const findings = findingsByMessage.flat();
+      const inspection = await inspectChat(chat, this.config);
+      const findings = inspection.findings;
       const requestedProvider = request.headers.get("x-egrysa-provider");
       const policy = decide(findings, requestedProvider, this.config);
       if (policy.decision === "deny" || !policy.provider) {
         this.metrics.denied++;
         const receipt = await this.receipts.create({
           requestCanonical: originalJson,
+          workloadId,
           decision: "deny",
           provider: null,
           model: chat.model,
@@ -77,34 +88,93 @@ export class Gateway {
         return problem(403, "policy_denied", policy.reason, receipt.id);
       }
 
-      const transformed = cloneMessages(chat.messages);
-      const aggregateMap = new Map<string, string>();
+      if (
+        policy.decision === "transform" &&
+        inspection.untransformableFindings.some((finding) =>
+          this.config.policy.transformKinds.includes(finding.kind)
+        )
+      ) {
+        this.metrics.denied++;
+        const receipt = await this.receipts.create({
+          requestCanonical: originalJson,
+          workloadId,
+          decision: "deny",
+          provider: null,
+          model: chat.model,
+          findings,
+          transformedFields: 0,
+        });
+        return problem(
+          403,
+          "policy_denied",
+          "Sensitive data in a structural tool field cannot be transformed safely.",
+          receipt.id,
+        );
+      }
+
+      let outbound = structuredClone(chat);
+      let aggregateMap = new Map<string, string>();
       let transformedFields = 0;
       if (policy.decision === "transform") {
         const allowed = new Set(this.config.policy.transformKinds);
-        transformed.forEach((message, index) => {
-          const result = transform(message.content, findingsByMessage[index] ?? [], allowed);
-          message.content = result.text;
-          transformedFields += result.mapping.size;
-          for (const item of result.mapping) aggregateMap.set(...item);
-        });
+        const transformed = transformChat(chat, inspection, allowed);
+        outbound = transformed.chat;
+        aggregateMap = transformed.mapping;
+        transformedFields = transformed.transformedFields;
         this.metrics.transformed++;
       }
 
-      const response = await invokeProvider(
-        policy.provider,
-        { ...chat, messages: transformed },
-        this.config.requestTimeoutMs,
-      );
-      const recomposed = mapResponseContent(response, (text) => recompose(text, aggregateMap));
       const receipt = await this.receipts.create({
         requestCanonical: originalJson,
+        workloadId,
         decision: policy.decision,
         provider: policy.provider.id,
         model: chat.model,
         findings,
         transformedFields,
       });
+      receiptId = receipt.id;
+      const invocation = await invokeProvider(
+        policy.provider,
+        outbound,
+        this.config.requestTimeoutMs,
+      );
+      if (invocation.type === "stream") {
+        const stream = recomposeOpenAiStream(
+          invocation.response.body!,
+          aggregateMap,
+          (error) => {
+            if (error instanceof RecompositionError) this.metrics.recompositionFailures++;
+            else this.metrics.providerErrors++;
+          },
+          invocation.complete,
+        );
+        return new Response(stream, {
+          status: 200,
+          headers: {
+            "content-type": "text/event-stream; charset=utf-8",
+            "x-accel-buffering": "no",
+            "x-egrysa-receipt": receipt.id,
+            "x-egrysa-decision": policy.decision,
+            ...securityHeaders(),
+          },
+        });
+      }
+      let residueDetected = false;
+      const recomposed = mapResponseContent(invocation.data, (text) => {
+        const result = recomposeChecked(text, aggregateMap);
+        residueDetected ||= result.residueDetected;
+        return result.text;
+      });
+      if (residueDetected) {
+        this.metrics.recompositionFailures++;
+        return problem(
+          502,
+          "recomposition_failed",
+          "The provider response could not be safely recomposed.",
+          receipt.id,
+        );
+      }
       return json(recomposed, 200, {
         "x-egrysa-receipt": receipt.id,
         "x-egrysa-decision": policy.decision,
@@ -112,7 +182,7 @@ export class Gateway {
     } catch (error) {
       if (error instanceof ProviderError) {
         this.metrics.providerErrors++;
-        return problem(error.status, "provider_error", error.message);
+        return problem(error.status, "provider_error", error.message, receiptId);
       }
       if (error instanceof DOMException && error.name === "AbortError") {
         return problem(504, "provider_timeout", "The provider exceeded the configured deadline.");
@@ -131,6 +201,18 @@ export class Gateway {
     } finally {
       this.metrics.inFlight--;
     }
+  }
+
+  private models(): Response {
+    const seen = new Set<string>();
+    const data = this.config.providers.flatMap((provider) =>
+      provider.allowedModels.filter((model) => {
+        if (seen.has(model)) return false;
+        seen.add(model);
+        return true;
+      }).map((id) => ({ id, object: "model", created: 0, owned_by: "egrysa" }))
+    );
+    return json({ object: "list", data });
   }
 }
 
@@ -167,6 +249,10 @@ function validateChat(value: unknown): string | null {
     "frequency_penalty",
     "presence_penalty",
     "seed",
+    "tools",
+    "tool_choice",
+    "parallel_tool_calls",
+    "stream_options",
   ]);
   if (Object.keys(body).some((key) => !allowedRequestFields.has(key))) {
     return "Request contains unsupported fields.";
@@ -178,15 +264,39 @@ function validateChat(value: unknown): string | null {
   for (const message of body.messages) {
     if (
       !message || typeof message !== "object" || Array.isArray(message) ||
-      !["system", "user", "assistant"].includes(message.role) ||
-      typeof message.content !== "string"
-    ) return "Only text system, user, and assistant messages are supported.";
-    if (Object.keys(message).some((key) => key !== "role" && key !== "content")) {
+      !["system", "user", "assistant", "tool"].includes(message.role)
+    ) return "Only text and tool chat messages are supported.";
+    if (
+      Object.keys(message).some((key) =>
+        !["role", "content", "name", "tool_call_id", "tool_calls"].includes(key)
+      )
+    ) {
       return "A message contains unsupported fields.";
     }
+    if (message.name !== undefined && !validName(message.name)) return "A message name is invalid.";
+    if (message.role === "tool") {
+      if (typeof message.content !== "string" || !validOpaqueId(message.tool_call_id)) {
+        return "Tool messages require text content and a valid tool_call_id.";
+      }
+      if (message.tool_calls !== undefined) return "Tool messages cannot contain tool_calls.";
+    } else if (message.role === "assistant") {
+      if (message.content !== null && typeof message.content !== "string") {
+        return "Assistant content must be text or null.";
+      }
+      if (message.tool_call_id !== undefined) return "Assistant messages cannot use tool_call_id.";
+      if (message.tool_calls !== undefined && !validToolCalls(message.tool_calls)) {
+        return "Assistant tool_calls are invalid.";
+      }
+      if (message.content === null && !message.tool_calls?.length) {
+        return "Assistant messages require content or tool_calls.";
+      }
+    } else if (
+      typeof message.content !== "string" || message.tool_call_id !== undefined ||
+      message.tool_calls !== undefined
+    ) return "System and user messages require text content.";
   }
-  if (body.stream !== undefined && body.stream !== false) {
-    return "Streaming is disabled because safe recomposition requires a complete response.";
+  if (body.stream !== undefined && typeof body.stream !== "boolean") {
+    return "stream must be boolean.";
   }
   if (!optionalNumberInRange(body.temperature, 0, 2)) {
     return "temperature must be a finite number between 0 and 2.";
@@ -206,7 +316,87 @@ function validateChat(value: unknown): string | null {
   if (body.seed !== undefined && !Number.isSafeInteger(body.seed)) {
     return "seed must be a safe integer.";
   }
+  if (body.tools !== undefined && !validTools(body.tools)) return "tools are invalid.";
+  if (body.tool_choice !== undefined && !validToolChoice(body.tool_choice)) {
+    return "tool_choice is invalid.";
+  }
+  if (body.parallel_tool_calls !== undefined && typeof body.parallel_tool_calls !== "boolean") {
+    return "parallel_tool_calls must be boolean.";
+  }
+  if (body.stream_options !== undefined) {
+    if (
+      !body.stream || !isRecord(body.stream_options) ||
+      Object.keys(body.stream_options).some((key) => key !== "include_usage") ||
+      (body.stream_options.include_usage !== undefined &&
+        typeof body.stream_options.include_usage !== "boolean")
+    ) return "stream_options requires streaming and only supports include_usage.";
+  }
   return null;
+}
+
+function validToolCalls(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0 && value.length <= 128 &&
+    value.every((call) =>
+      isRecord(call) && Object.keys(call).every((key) =>
+        ["id", "type", "function"].includes(key)
+      ) &&
+      validOpaqueId(call.id) && call.type === "function" && isRecord(call.function) &&
+      Object.keys(call.function).every((key) => ["name", "arguments"].includes(key)) &&
+      validName(call.function.name) && typeof call.function.arguments === "string" &&
+      validJsonObject(call.function.arguments)
+    );
+}
+
+function validTools(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0 && value.length <= 128 &&
+    value.every((tool) =>
+      isRecord(tool) && Object.keys(tool).every((key) => ["type", "function"].includes(key)) &&
+      tool.type === "function" && isRecord(tool.function) &&
+      Object.keys(tool.function).every((key) =>
+        ["name", "description", "parameters", "strict"].includes(key)
+      ) && validName(tool.function.name) &&
+      (tool.function.description === undefined || typeof tool.function.description === "string") &&
+      (tool.function.parameters === undefined || isJsonObject(tool.function.parameters)) &&
+      (tool.function.strict === undefined || typeof tool.function.strict === "boolean")
+    );
+}
+
+function validToolChoice(value: unknown): boolean {
+  if (["none", "auto", "required"].includes(String(value))) return typeof value === "string";
+  return isRecord(value) && Object.keys(value).every((key) => ["type", "function"].includes(key)) &&
+    value.type === "function" && isRecord(value.function) &&
+    Object.keys(value.function).every((key) => key === "name") && validName(value.function.name);
+}
+
+function validName(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
+function validOpaqueId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+}
+
+function validJsonObject(value: string): boolean {
+  try {
+    return isJsonObject(JSON.parse(value));
+  } catch {
+    return false;
+  }
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && isJsonValue(value);
+}
+
+function isJsonValue(value: unknown): boolean {
+  if (value === null || ["string", "boolean"].includes(typeof value)) return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isJsonValue);
+  return isRecord(value) && Object.values(value).every(isJsonValue);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 function optionalNumberInRange(value: unknown, min: number, max: number): boolean {

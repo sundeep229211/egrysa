@@ -1,4 +1,4 @@
-import { recompose, transform } from "../src/surrogate.ts";
+import { recompose, recomposeChecked, transform } from "../src/surrogate.ts";
 import type { Finding } from "../src/types.ts";
 
 Deno.test("surrogates are consistent within one request and recompose locally", () => {
@@ -16,4 +16,13 @@ Deno.test("surrogates are consistent within one request and recompose locally", 
   const token = [...result.mapping.keys()][0]!;
   if (result.text.split(token).length !== 3) throw new Error("token was not reused");
   if (recompose(result.text, result.mapping) !== text) throw new Error("recomposition failed");
+});
+
+Deno.test("recomposition reports provider-mutated surrogate residue", () => {
+  const token = "__EGRYSA_EMAIL_0001_aabbccddeeff__";
+  const mapping = new Map([[token, "a@example.com"]]);
+  const result = recomposeChecked(token.toLowerCase(), mapping);
+  if (!result.residueDetected || result.text.includes("a@example.com")) {
+    throw new Error("mutated surrogate residue was not detected");
+  }
 });

@@ -1,3 +1,4 @@
+import { type LocalDetector, runDetector } from "./detectors.ts";
 import type { AppConfig, Finding, FindingKind } from "./types.ts";
 
 const patterns: Array<{ kind: FindingKind; regex: RegExp; validate?: (value: string) => boolean }> =
@@ -12,45 +13,99 @@ const patterns: Array<{ kind: FindingKind; regex: RegExp; validate?: (value: str
       regex: /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[opusr]_[A-Za-z0-9]{20,})\b/g,
     },
     { kind: "email", regex: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi },
-    { kind: "ssn", regex: /\b(?!000|666|9\d\d)\d{3}[- ]?(?!00)\d{2}[- ]?(?!0000)\d{4}\b/g },
+    {
+      kind: "ssn",
+      regex: /\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b/g,
+    },
     { kind: "iban", regex: /\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/g, validate: validateIban },
     { kind: "credit_card", regex: /\b(?:\d[ -]*?){13,19}\b/g, validate: luhn },
     { kind: "ipv4", regex: /\b(?:\d{1,3}\.){3}\d{1,3}\b/g, validate: validateIpv4 },
     {
       kind: "phone",
-      regex: /(?<!\w)(?:\+?\d[\d .()-]{7,}\d)(?!\w)/g,
+      regex:
+        /(?<!\w)(?<!\d[ -])(?:\+\d[\d .()-]{7,}\d|\(\d{2,4}\)[ -]?\d[\d -]{5,}\d|\d{3}[- ]\d{3}[- ]\d{4}|\d{3,4} \d{3,4} \d{4})(?!\w|[ -]\d)/g,
       validate: validatePhone,
     },
   ];
 
-export function classify(text: string, config: AppConfig): Finding[] {
-  const findings: Finding[] = [];
-  for (const item of patterns) {
-    item.regex.lastIndex = 0;
-    for (const match of text.matchAll(item.regex)) {
-      const value = match[0];
-      const start = match.index;
-      if (start === undefined || (item.validate && !item.validate(value))) continue;
-      findings.push({ kind: item.kind, start, end: start + value.length, value });
-    }
-  }
-  for (const item of config.policy.sensitiveTerms) {
-    const escaped = item.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const regex = new RegExp(`\\b${escaped}\\b`, "gi");
-    for (const match of text.matchAll(regex)) {
-      const start = match.index;
-      if (start !== undefined) {
-        findings.push({
-          kind: "confidential_term",
-          start,
-          end: start + match[0].length,
-          value: match[0],
-          label: item.label,
-        });
-      }
-    }
-  }
+export async function classify(
+  text: string,
+  config: AppConfig,
+  detectors: LocalDetector[] = createDetectors(config),
+): Promise<Finding[]> {
+  const findings = (await Promise.all(detectors.map((detector) => runDetector(detector, text))))
+    .flat();
   return removeOverlaps(findings);
+}
+
+export function createDetectors(config: AppConfig): LocalDetector[] {
+  return [patternDetector(), sensitiveTermDetector(config)];
+}
+
+function patternDetector(): LocalDetector {
+  return {
+    manifest: {
+      contractVersion: "1",
+      id: "egrysa.deterministic.patterns",
+      version: "1.1.0",
+      provenance: "built-in",
+      timeoutMs: 100,
+    },
+    detect({ text }) {
+      const findings: Finding[] = [];
+      for (const item of patterns) {
+        item.regex.lastIndex = 0;
+        for (const match of text.matchAll(item.regex)) {
+          const value = match[0];
+          const start = match.index;
+          if (start === undefined || (item.validate && !item.validate(value))) continue;
+          findings.push({
+            kind: item.kind,
+            start,
+            end: start + value.length,
+            value,
+            confidence: 1,
+            precision: "high",
+          });
+        }
+      }
+      return { contractVersion: "1", findings };
+    },
+  };
+}
+
+function sensitiveTermDetector(config: AppConfig): LocalDetector {
+  return {
+    manifest: {
+      contractVersion: "1",
+      id: "egrysa.deterministic.sensitive-terms",
+      version: "1.0.0",
+      provenance: "operator-configured",
+      timeoutMs: 100,
+    },
+    detect({ text }) {
+      const findings: Finding[] = [];
+      for (const item of config.policy.sensitiveTerms) {
+        const escaped = item.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const regex = new RegExp(`\\b${escaped}\\b`, "gi");
+        for (const match of text.matchAll(regex)) {
+          const start = match.index;
+          if (start !== undefined) {
+            findings.push({
+              kind: "confidential_term",
+              start,
+              end: start + match[0].length,
+              value: match[0],
+              label: item.label,
+              confidence: 1,
+              precision: "high",
+            });
+          }
+        }
+      }
+      return { contractVersion: "1", findings };
+    },
+  };
 }
 
 function removeOverlaps(findings: Finding[]): Finding[] {
@@ -104,8 +159,10 @@ function validateIpv4(value: string): boolean {
 
 function validatePhone(value: string): boolean {
   if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(value)) return false;
+  if (/^\d{3}-\d{2}-\d{4}$/.test(value)) return false;
   const number = digits(value);
-  return number.length >= 8 && number.length <= 15;
+  const structured = value.startsWith("+") || /[ .()-]/.test(value);
+  return structured && number.length >= 8 && number.length <= 15;
 }
 
 function validateIban(value: string): boolean {

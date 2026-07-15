@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: egrysa
 spec:
-  # v0.1 receipts are process-local and ephemeral. Scale only after configuring a durable backend.
+  # The JSONL chain is durable on one PVC. Multi-replica sequencing still requires a shared backend.
   replicas: 1
   selector:
     matchLabels:
@@ -33,8 +33,9 @@ spec:
             - --frozen
             - --cached-only
             - --no-prompt
-            - --allow-read=/app/config
-            - --allow-env=EGRYSA_CONFIG,EGRYSA_INBOUND_KEYS,EGRYSA_RECEIPT_HMAC_KEY,OPENAI_API_KEY
+            - --allow-read=/app/config,/var/lib/egrysa
+            - --allow-write=/var/lib/egrysa
+            - --allow-env=EGRYSA_CONFIG,EGRYSA_INBOUND_KEYS,EGRYSA_RECEIPT_FINGERPRINT_KEY,EGRYSA_RECEIPT_ED25519_PRIVATE_KEY,EGRYSA_RECEIPT_ED25519_PUBLIC_KEY,OPENAI_API_KEY
             - --allow-net=0.0.0.0:8787,api.openai.com,localhost:11434
             - /app/src/main.ts
           env:
@@ -42,13 +43,19 @@ spec:
               value: /app/config/egrysa.json
             - name: EGRYSA_INBOUND_KEYS
               valueFrom:
-                secretKeyRef: { name: egrysa-secrets, key: inbound-keys }
-            - name: EGRYSA_RECEIPT_HMAC_KEY
+                secretKeyRef: { name: egrysa-secrets, key: EGRYSA_INBOUND_KEYS }
+            - name: EGRYSA_RECEIPT_FINGERPRINT_KEY
               valueFrom:
-                secretKeyRef: { name: egrysa-secrets, key: receipt-hmac-key }
+                secretKeyRef: { name: egrysa-secrets, key: EGRYSA_RECEIPT_FINGERPRINT_KEY }
+            - name: EGRYSA_RECEIPT_ED25519_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef: { name: egrysa-secrets, key: EGRYSA_RECEIPT_ED25519_PRIVATE_KEY }
+            - name: EGRYSA_RECEIPT_ED25519_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef: { name: egrysa-secrets, key: EGRYSA_RECEIPT_ED25519_PUBLIC_KEY }
             - name: OPENAI_API_KEY
               valueFrom:
-                secretKeyRef: { name: egrysa-secrets, key: openai-api-key }
+                secretKeyRef: { name: egrysa-secrets, key: OPENAI_API_KEY }
           ports:
             - { name: http, containerPort: 8787, protocol: TCP }
           readinessProbe:
@@ -69,10 +76,13 @@ spec:
               drop: ["ALL"]
           volumeMounts:
             - { name: config, mountPath: /app/config, readOnly: true }
+            - { name: receipts, mountPath: /var/lib/egrysa }
             - { name: tmp, mountPath: /tmp }
       volumes:
         - name: config
           configMap: { name: egrysa-config }
+        - name: receipts
+          persistentVolumeClaim: { claimName: egrysa-receipts }
         - name: tmp
           emptyDir: { medium: Memory, sizeLimit: 16Mi }
       topologySpreadConstraints:

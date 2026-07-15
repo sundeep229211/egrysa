@@ -12,8 +12,12 @@ Deno.test("shipped container configuration validates and listens on all interfac
   }
   const normalized = structuredClone(config);
   normalized.listen = structuredClone(exampleConfig.listen);
+  normalized.receiptLogPath = exampleConfig.receiptLogPath;
+  normalized.receiptChainId = exampleConfig.receiptChainId;
   if (JSON.stringify(normalized) !== JSON.stringify(exampleConfig)) {
-    throw new Error("container configuration may differ from the example only by listen address");
+    throw new Error(
+      "container configuration may differ only by listen address and receipt storage identity",
+    );
   }
 });
 

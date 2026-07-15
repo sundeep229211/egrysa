@@ -32,7 +32,10 @@ training settings are policy inputs that must be validated through contract and 
 
 ## Demonstrated in this repository
 
-- OpenAI-compatible `POST /v1/chat/completions` ingress.
+- OpenAI-compatible `POST /v1/chat/completions` ingress and `GET /v1/models` discovery.
+- SSE streaming for OpenAI-compatible providers with bounded holdback recomposition.
+- Function-tool definitions, assistant tool calls, and tool results as inspected text surfaces;
+  Egrysa does not execute tools.
 - Deterministic detection for emails, phones, IP addresses, IBANs, payment cards, US SSNs, private
   keys, common API secrets, and configured confidential terms.
 - Four decisions: `deny`, `local_only`, `transform`, and explicitly approved `allow_raw`.
@@ -41,8 +44,8 @@ training settings are policy inputs that must be validated through contract and 
 - Model allowlists, HTTPS enforcement, loopback-only HTTP, upstream deadlines, request-size limits,
   and no redirects.
 - `store: false` forced on OpenAI-compatible remote requests.
-- HMAC-signed, hash-chained policy receipts with a keyed, nonce-bound request fingerprint and no raw
-  prompt or response content.
+- Append-only JSONL, Ed25519-signed, hash-chained policy receipts with workload attribution, a keyed
+  nonce-bound request fingerprint, public verification material, and no raw prompt or response.
 - No raw prompt or response logging.
 - Deno capability sandbox, no subprocess/FFI permission, and zero third-party runtime packages.
 - Hardened Kubernetes baseline, immutable CI actions, CodeQL, dependency review, SBOM, and SLSA
@@ -50,8 +53,10 @@ training settings are policy inputs that must be validated through contract and 
 
 ## Deliberate exclusions
 
-- No streaming: safe recomposition requires the complete response.
-- No tools, files, audio, or images: each creates a separate egress and injection boundary.
+- Anthropic-adapter streaming remains unsupported and fails closed.
+- Function tools are passed through but never executed. Sensitive structural schema keys fail
+  closed.
+- No files, audio, or images: each creates a separate egress and injection boundary.
 - No cross-provider prompt splitting: it increases the number of recipients and can destroy
   semantics. It requires an evidence-backed decomposition protocol before release.
 - No durable prompt memory. The surrogate map exists only for the request lifetime.
@@ -74,11 +79,21 @@ assurance. It must not depend on observing customer prompt content.
 
 Requirements: Deno 2.9.2. The repository has no external code dependencies.
 
-1. Add two values of at least 32 random characters to `.env.local`:
+1. Generate an attributed client key, a 32-byte fingerprint key, and a matching Ed25519 keypair:
+
+   ```sh
+   deno task keygen > .env.local
+   ```
+
+   To avoid shell redirection, run `deno run --allow-write=.env.local tools/keygen.ts .env.local`.
+
+   The generated local-only file contains:
 
    ```text
-   EGRYSA_INBOUND_KEYS=<client bearer key>
-   EGRYSA_RECEIPT_HMAC_KEY=<receipt signing key>
+   EGRYSA_INBOUND_KEYS=example-workload=<client bearer key>
+   EGRYSA_RECEIPT_FINGERPRINT_KEY=<request-fingerprint key>
+   EGRYSA_RECEIPT_ED25519_PRIVATE_KEY=<base64 PKCS8 private key>
+   EGRYSA_RECEIPT_ED25519_PUBLIC_KEY=<base64 SPKI public key>
    ```
 
 2. Keep provider keys in `.env.local`; never put them in JSON or Git.
@@ -89,6 +104,7 @@ Requirements: Deno 2.9.2. The repository has no external code dependencies.
    ```sh
    deno task check
    deno task eval
+   deno task acceptance
    deno task dev
    ```
 
@@ -101,7 +117,9 @@ Requirements: Deno 2.9.2. The repository has no external code dependencies.
      -d '{"model":"gpt-5.2","messages":[{"role":"user","content":"Email alex@example.com with a two-line summary."}]}'
    ```
 
-The response headers contain `x-egrysa-decision` and `x-egrysa-receipt`.
+The response headers contain `x-egrysa-decision` and `x-egrysa-receipt`. The public verification key
+and an externally storable signed chain checkpoint are available at `/v1/receipts/public-key` and
+`/v1/receipts/checkpoint` with gateway authentication.
 
 ## Read first
 

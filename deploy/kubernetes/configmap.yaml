@@ -11,6 +11,8 @@ data:
       "maxRequestBytes": 1048576,
       "requestTimeoutMs": 60000,
       "receiptCapacity": 10000,
+      "receiptLogPath": "/var/lib/egrysa/receipts.jsonl",
+      "receiptChainId": "egrysa-kubernetes-alpha",
       "providers": [
         {
           "id": "openai",

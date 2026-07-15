@@ -6,6 +6,8 @@ export function testConfig(): AppConfig {
     maxRequestBytes: 1024 * 1024,
     requestTimeoutMs: 5_000,
     receiptCapacity: 100,
+    receiptLogPath: ":memory:",
+    receiptChainId: "egrysa-test",
     providers: [
       {
         id: "remote",

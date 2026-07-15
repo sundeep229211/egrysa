@@ -10,3 +10,39 @@
 {"id":"general-001","scenario":"clean generic query","prompt":"Explain the difference between revenue and cash flow.","expectedKinds":[],"expectedDecision":"deny"}
 {"id":"false-positive-001","scenario":"invalid card-like digits","prompt":"The reference sequence is 1234 5678 9012 3456.","expectedKinds":[],"expectedDecision":"deny"}
 {"id":"false-positive-002","scenario":"invalid network address","prompt":"The fictional address is 999.999.999.999.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"legal-002","scenario":"mixed-case email","prompt":"Ask ALEX.SMITH+LEGAL@Example.ORG for approval.","expectedKinds":["email"],"expectedDecision":"transform"}
+{"id":"sales-001","scenario":"customer email","prompt":"Follow up with buyer@customer.co.uk tomorrow.","expectedKinds":["email"],"expectedDecision":"transform"}
+{"id":"support-001","scenario":"email beside punctuation","prompt":"Escalation owner is <oncall@example.io>.","expectedKinds":["email"],"expectedDecision":"transform"}
+{"id":"finance-002","scenario":"mastercard test number","prompt":"The synthetic card is 5555-5555-5555-4444.","expectedKinds":["credit_card"],"expectedDecision":"deny"}
+{"id":"finance-003","scenario":"amex test number","prompt":"Use test account 378282246310005 only.","expectedKinds":["credit_card"],"expectedDecision":"deny"}
+{"id":"finance-004","scenario":"discover test number","prompt":"QA fixture: 6011 1111 1111 1117.","expectedKinds":["credit_card"],"expectedDecision":"deny"}
+{"id":"engineering-003","scenario":"AWS access key","prompt":"Credential observed: AKIAIOSFODNN7EXAMPLE.","expectedKinds":["api_secret"],"expectedDecision":"deny"}
+{"id":"engineering-004","scenario":"GitHub token","prompt":"Revoke ghp_abcdefghijklmnopqrstuvwxyz123456 immediately.","expectedKinds":["api_secret"],"expectedDecision":"deny"}
+{"id":"engineering-005","scenario":"RSA private key","prompt":"Found -----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY----- in the bundle.","expectedKinds":["private_key"],"expectedDecision":"deny"}
+{"id":"hr-002","scenario":"canonical SSN","prompt":"Employee tax identifier: 123-45-6789.","expectedKinds":["ssn"],"expectedDecision":"deny"}
+{"id":"hr-003","scenario":"SSN with leading zero","prompt":"Synthetic SSN 078-05-1120 belongs in the fixture.","expectedKinds":["ssn"],"expectedDecision":"deny"}
+{"id":"treasury-002","scenario":"German IBAN","prompt":"Validate DE89370400440532013000 before payment.","expectedKinds":["iban"],"expectedDecision":"transform"}
+{"id":"treasury-003","scenario":"French IBAN","prompt":"Beneficiary account FR1420041010050500013M02606 is synthetic.","expectedKinds":["iban"],"expectedDecision":"transform"}
+{"id":"network-002","scenario":"public IPv4","prompt":"The test service resolves to 192.0.2.44.","expectedKinds":["ipv4"],"expectedDecision":"transform"}
+{"id":"network-003","scenario":"maximum IPv4 octets","prompt":"Block traffic from 255.255.255.255 in the lab.","expectedKinds":["ipv4"],"expectedDecision":"transform"}
+{"id":"support-002","scenario":"international phone","prompt":"Call +1 (415) 555-2671 for the synthetic escalation.","expectedKinds":["phone"],"expectedDecision":"transform"}
+{"id":"support-003","scenario":"hyphenated phone","prompt":"The demo hotline is 415-555-2671.","expectedKinds":["phone"],"expectedDecision":"transform"}
+{"id":"support-004","scenario":"spaced UK phone","prompt":"Reach the sample office on 020 7946 0958.","expectedKinds":["phone"],"expectedDecision":"transform"}
+{"id":"ma-002","scenario":"confidential target case insensitive","prompt":"What are the risks for example acquisition target?","expectedKinds":["confidential_term"],"expectedDecision":"local_only"}
+{"id":"strategy-002","scenario":"initiative with punctuation","prompt":"Project Nightingale: prepare the steering memo.","expectedKinds":["confidential_term"],"expectedDecision":"local_only"}
+{"id":"mixed-001","scenario":"email and IP","prompt":"Tell admin@example.com that 10.20.30.40 is unavailable.","expectedKinds":["email","ipv4"],"expectedDecision":"transform"}
+{"id":"mixed-002","scenario":"email and blocked secret","prompt":"Send sk-proj-abcdefghijklmnopqrstuvwxyz123456 to admin@example.com.","expectedKinds":["api_secret","email"],"expectedDecision":"deny"}
+{"id":"mixed-003","scenario":"confidential term and email","prompt":"Email owner@example.com about Project Nightingale.","expectedKinds":["email","confidential_term"],"expectedDecision":"local_only"}
+{"id":"false-positive-003","scenario":"bare nine-digit order","prompt":"Order 123456789 is ready for dispatch.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-004","scenario":"spaced nine-digit ticket","prompt":"Ticket 123 45 6789 is not a government identifier.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-005","scenario":"invalid SSN area","prompt":"The rejected fixture is 000-12-3456.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-006","scenario":"invalid SSN group","prompt":"The rejected fixture is 123-00-4567.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-007","scenario":"invalid SSN serial","prompt":"The rejected fixture is 123-45-0000.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-008","scenario":"invalid repeated card","prompt":"The placeholder is 1111 1111 1111 1111.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-009","scenario":"bare ten-digit order","prompt":"Shipment reference 1234567890 cleared customs.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-010","scenario":"semantic email word","prompt":"Explain how email routing works without addresses.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-011","scenario":"version number","prompt":"Deploy release 10.20.300.4 after review.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-012","scenario":"UUID identifier","prompt":"Trace request 550e8400-e29b-41d4-a716-446655440000.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-013","scenario":"short numeric code","prompt":"Enter verification code 123456.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-014","scenario":"date and time","prompt":"The meeting is 2026-07-15 at 09:30.","expectedKinds":[],"expectedDecision":"deny"}
+{"id":"false-positive-015","scenario":"ordinary prose","prompt":"Summarize quarterly operating expenses by department.","expectedKinds":[],"expectedDecision":"deny"}

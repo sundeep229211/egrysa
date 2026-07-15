@@ -17,12 +17,14 @@
     }
   },
   "tasks": {
-    "check": "deno fmt --check && deno lint && deno check src/main.ts && deno test --allow-env --allow-net=127.0.0.1",
-    "dev": "deno run --env-file=.env.local --no-prompt --allow-read=config --allow-env=EGRYSA_CONFIG,EGRYSA_INBOUND_KEYS,EGRYSA_RECEIPT_HMAC_KEY,OPENAI_API_KEY,ANTHROPIC_API_KEY --allow-net=127.0.0.1:8787,localhost:11434,api.openai.com,api.anthropic.com src/main.ts",
-    "test": "deno test --allow-env --allow-net=127.0.0.1",
+    "check": "deno fmt --check && deno lint && deno check src/main.ts && deno test --allow-env --allow-read --allow-write --allow-net=127.0.0.1",
+    "dev": "deno run --env-file=.env.local --no-prompt --allow-read=config,data --allow-write=data --allow-env=EGRYSA_CONFIG,EGRYSA_INBOUND_KEYS,EGRYSA_RECEIPT_FINGERPRINT_KEY,EGRYSA_RECEIPT_ED25519_PRIVATE_KEY,EGRYSA_RECEIPT_ED25519_PUBLIC_KEY,OPENAI_API_KEY,ANTHROPIC_API_KEY --allow-net=127.0.0.1:8787,localhost:11434,api.openai.com,api.anthropic.com src/main.ts",
+    "test": "deno test --allow-env --allow-read --allow-write --allow-net=127.0.0.1",
     "eval": "deno run --no-prompt --allow-read=config,evals src/eval.ts",
-    "start": "deno run --frozen --cached-only --no-prompt --allow-read=config --allow-env=EGRYSA_CONFIG,EGRYSA_INBOUND_KEYS,EGRYSA_RECEIPT_HMAC_KEY,OPENAI_API_KEY,ANTHROPIC_API_KEY --allow-net=0.0.0.0:8787,api.openai.com,api.anthropic.com,localhost:11434 src/main.ts",
-    "compile": "deno compile --frozen --no-prompt --allow-read=config --allow-env=EGRYSA_CONFIG,EGRYSA_INBOUND_KEYS,EGRYSA_RECEIPT_HMAC_KEY,OPENAI_API_KEY,ANTHROPIC_API_KEY --allow-net=127.0.0.1:8787,0.0.0.0:8787,api.openai.com,api.anthropic.com,localhost:11434 --output dist/egrysa src/main.ts",
+    "acceptance": "deno test --allow-env --allow-read --allow-write --allow-net=127.0.0.1 tests/acceptance_test.ts",
+    "keygen": "deno run --no-prompt tools/keygen.ts",
+    "start": "deno run --frozen --cached-only --no-prompt --allow-read=config,data --allow-write=data --allow-env=EGRYSA_CONFIG,EGRYSA_INBOUND_KEYS,EGRYSA_RECEIPT_FINGERPRINT_KEY,EGRYSA_RECEIPT_ED25519_PRIVATE_KEY,EGRYSA_RECEIPT_ED25519_PUBLIC_KEY,OPENAI_API_KEY,ANTHROPIC_API_KEY --allow-net=0.0.0.0:8787,api.openai.com,api.anthropic.com,localhost:11434 src/main.ts",
+    "compile": "deno compile --frozen --no-prompt --allow-read=config,data --allow-write=data --allow-env=EGRYSA_CONFIG,EGRYSA_INBOUND_KEYS,EGRYSA_RECEIPT_FINGERPRINT_KEY,EGRYSA_RECEIPT_ED25519_PRIVATE_KEY,EGRYSA_RECEIPT_ED25519_PUBLIC_KEY,OPENAI_API_KEY,ANTHROPIC_API_KEY --allow-net=127.0.0.1:8787,0.0.0.0:8787,api.openai.com,api.anthropic.com,localhost:11434 --output dist/egrysa src/main.ts",
     "smoke": "deno test --env-file=.env.local --allow-net=api.openai.com --allow-env=OPENAI_API_KEY,EGRYSA_LIVE_TEST tests/live_openai_test.ts"
   },
   "lock": {

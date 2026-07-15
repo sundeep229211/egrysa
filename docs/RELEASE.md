@@ -5,12 +5,14 @@
 - The release commit is reachable from protected `main`.
 - `deno task check`, `deno task eval`, and `deno audit` pass.
 - Public claims match demonstrated behavior and `CHANGELOG.md` is current.
+- Hardened container and Kubernetes probes pass with the durable receipt volume, Ed25519 keys,
+  streaming, tools, restart continuity, and tamper rejection.
 - GitHub private vulnerability reporting is enabled and tested.
 - The tag is annotated and signed by an authorized maintainer.
 
-These controls are enabled on the public repository. Do not create the first tag until dependency
-review has passed in a public pull request and private vulnerability reporting has been tested from
-a non-maintainer account.
+These controls are enabled on the public repository, and the current workspace has fresh local
+runtime evidence. Do not create the first tag until the reviewed change passes protected public CI
+and private vulnerability reporting has been tested from a non-maintainer account.
 
 ## Private no-payment staging
 
@@ -63,9 +65,10 @@ publish a release to work around the failure.
   vulnerability reporting are enabled.
 - Public CI run [`29415491535`](https://github.com/sundeep229211/egrysa/actions/runs/29415491535)
   passed source verification, the independent security baseline, and CodeQL on protected `main`.
-- Dependency review requires pull-request context and remains a required check on the public
-  evidence pull request. The private reporting route still requires a test from a non-maintainer
-  account.
+- Public pull request #6 CI run
+  [`29416315398`](https://github.com/sundeep229211/egrysa/actions/runs/29416315398) passed
+  dependency review and the other required checks. The private reporting route still requires a test
+  from a non-maintainer account.
 - No public tag, package image, or GitHub release has been created.
 
 ## Alpha versioning

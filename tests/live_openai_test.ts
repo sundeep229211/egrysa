@@ -17,8 +17,12 @@ Deno.test({
       model: "gpt-5.2",
       messages: [{ role: "user", content: "Reply with exactly: egrysa" }],
     }, 30_000);
+    if (response.type !== "json") throw new Error("expected non-streaming response");
     const content =
-      ((response.choices as Array<Record<string, unknown>>)[0]?.message as Record<string, unknown>)
+      ((response.data.choices as Array<Record<string, unknown>>)[0]?.message as Record<
+        string,
+        unknown
+      >)
         ?.content;
     if (typeof content !== "string" || !content.toLowerCase().includes("egrysa")) {
       throw new Error("unexpected live response");
