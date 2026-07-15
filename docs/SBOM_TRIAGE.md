@@ -6,9 +6,9 @@ Review date: 2026-07-15
 
 This review covers the image built by private release dry run
 [`29397265834`](https://github.com/sundeep229211/egrysa/actions/runs/29397265834) from commit
-`97838f95bf1578a6ea56c1f4de38f10c3eca2c0b`. The subsequent commit changes only tests and
+`97838f95bf1578a6ea56c1f4de38f10c3eca2c0b`. The commits after that dry run change only tests and
 documentation; the Containerfile, Deno configuration, source, and runtime configuration are
-unchanged.
+unchanged through commit `8528ee0008cb14e9f2917893daef4f4b886f6905`.
 
 - CycloneDX document: 11 components, 14 unique advisories, and 17 affected-package occurrences.
 - Retained artifact digest:
