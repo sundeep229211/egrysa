@@ -6,7 +6,7 @@
 flowchart TB
     subgraph Customer["Customer-controlled boundary"]
       U["User / application"] --> SDK["Client or agent SDK"]
-      SDK --> G["SovereignLoop ingress"]
+      SDK --> G["Egrysa ingress"]
       G --> V["Validate: auth, size, modality, model"]
       V --> C["Classify: secrets, PII, confidential terms"]
       C --> P{"Policy decision"}
@@ -17,7 +17,7 @@ flowchart TB
       LM --> RC["Local recomposition"]
       SV --> RC
       RC --> U
-      P --> PR["Signed content-free receipt"]
+      P --> PR["Signed content-minimized policy receipt"]
     end
 
     E --> DNS["Customer DNS / network / TLS"]
@@ -32,22 +32,23 @@ flowchart TB
 
 ## Control matrix
 
-| Point            | Customer control                           | SovereignLoop control                                                  | Not controlled here                                             |
+| Point            | Customer control                           | Egrysa control                                                         | Not controlled here                                             |
 | ---------------- | ------------------------------------------ | ---------------------------------------------------------------------- | --------------------------------------------------------------- |
 | User input       | Endpoint, identity, acceptable-use policy  | API authentication and supported shape                                 | Copy/paste before the gateway                                   |
 | Pre-egress       | Network placement and taxonomy             | classify, deny, transform, route                                       | Unknown entities outside the taxonomy                           |
 | Egress           | DNS, firewall, proxy, private connectivity | fixed provider URL, HTTPS, no redirect, model allowlist                | Public internet routing and provider edge                       |
 | Provider request | Contract, project, region, entitlements    | strips unsupported fields; forces `store:false` for OpenAI-style calls | Provider safety review, legal holds, metadata, internal systems |
 | Inference        | provider/model choice                      | approved provider and model only                                       | weights, caches, internal routing, model behavior               |
-| Response         | application UX                             | buffered recomposition and content-free receipt                        | Provider-generated sensitive text not tied to a surrogate       |
+| Response         | application UX                             | buffered recomposition and content-minimized receipt                   | Provider-generated sensitive text not tied to a surrogate       |
 | Memory           | customer architecture                      | none in v0.1                                                           | Any external application or provider conversation state         |
 
 ## Data invariants
 
 - Surrogate maps are request-scoped `Map` objects and are not passed to logging, receipt, or
   persistence code.
-- Receipts contain a request hash, finding counts, decision, provider/model identifiers, and
-  chain/signature values only.
+- Receipts contain a keyed, nonce-bound request fingerprint, finding counts, decision,
+  provider/model identifiers, and chain/signature values only. They contain no raw prompt or
+  response content.
 - Provider credentials are read from named environment variables and never accepted in request
   bodies.
 - Remote providers require HTTPS; plaintext HTTP is limited to loopback providers explicitly marked

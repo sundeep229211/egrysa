@@ -25,7 +25,7 @@ export function transform(
     const identity = `${finding.kind}:${finding.value}`;
     let token = reusable.get(identity);
     if (!token) {
-      token = `__SL_${finding.kind.toUpperCase()}_${String(++sequence).padStart(4, "0")}_${
+      token = `__EGRYSA_${finding.kind.toUpperCase()}_${String(++sequence).padStart(4, "0")}_${
         randomToken(6)
       }__`;
       reusable.set(identity, token);

@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: sovereignloop-config
+  name: egrysa-config
   labels:
-    app.kubernetes.io/name: sovereignloop
+    app.kubernetes.io/name: egrysa
 data:
-  sovereignloop.json: |
+  egrysa.json: |
     {
       "listen": { "hostname": "0.0.0.0", "port": 8787 },
       "maxRequestBytes": 1048576,
@@ -19,11 +19,19 @@ data:
           "apiKeyEnv": "OPENAI_API_KEY",
           "allowedModels": ["gpt-5.6-luna"],
           "dataPolicy": { "training": "disabled", "retention": "standard", "allowRaw": false }
+        },
+        {
+          "id": "local",
+          "kind": "openai-compatible",
+          "baseUrl": "http://localhost:11434/v1",
+          "allowedModels": ["REPLACE_WITH_LOCAL_MODEL"],
+          "local": true,
+          "dataPolicy": { "training": "unknown", "retention": "none", "allowRaw": true }
         }
       ],
       "policy": {
         "defaultProvider": "openai",
-        "localProvider": "openai",
+        "localProvider": "local",
         "blockKinds": ["credit_card", "private_key", "api_secret", "ssn"],
         "localOnlyKinds": ["confidential_term"],
         "transformKinds": ["email", "phone", "ipv4", "iban"],

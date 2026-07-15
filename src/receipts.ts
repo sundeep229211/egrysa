@@ -2,7 +2,7 @@ import { hmacSha256, sha256 } from "./crypto.ts";
 import type { Decision, Finding, PrivacyReceipt } from "./types.ts";
 
 interface ReceiptInput {
-  requestHash: string;
+  requestCanonical: string;
   decision: Decision;
   provider: string | null;
   model: string;
@@ -17,7 +17,7 @@ export class ReceiptStore {
 
   constructor(private readonly key: string, private readonly capacity: number) {
     if (key.length < 32) {
-      throw new Error("SOVEREIGNLOOP_RECEIPT_HMAC_KEY must be at least 32 characters");
+      throw new Error("EGRYSA_RECEIPT_HMAC_KEY must be at least 32 characters");
     }
   }
 
@@ -36,11 +36,16 @@ export class ReceiptStore {
     for (const finding of input.findings) {
       findingCounts[finding.kind] = (findingCounts[finding.kind] ?? 0) + 1;
     }
+    const id = crypto.randomUUID();
+    const requestFingerprint = await hmacSha256(
+      this.key,
+      `egrysa/request-fingerprint/v1\0${id}\0${input.requestCanonical}`,
+    );
     const unsigned = {
       version: "1" as const,
-      id: crypto.randomUUID(),
+      id,
       timestamp: new Date().toISOString(),
-      requestHash: input.requestHash,
+      requestFingerprint,
       decision: input.decision,
       provider: input.provider,
       model: input.model,

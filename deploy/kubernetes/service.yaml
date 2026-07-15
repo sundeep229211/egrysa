@@ -1,21 +1,21 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: sovereignloop
+  name: egrysa
   labels:
-    app.kubernetes.io/name: sovereignloop
+    app.kubernetes.io/name: egrysa
 spec:
   selector:
-    app.kubernetes.io/name: sovereignloop
+    app.kubernetes.io/name: egrysa
   ports:
     - { name: http, port: 8787, targetPort: http }
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: sovereignloop
+  name: egrysa
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: sovereignloop
+      app.kubernetes.io/name: egrysa

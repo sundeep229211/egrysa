@@ -4,12 +4,11 @@ export class InboundAuth {
   private constructor(private readonly hashes: string[]) {}
 
   static async fromEnvironment(): Promise<InboundAuth> {
-    const keys = (Deno.env.get("SOVEREIGNLOOP_INBOUND_KEYS") ?? "").split(",").map((key) =>
-      key.trim()
-    ).filter(Boolean);
+    const keys = (Deno.env.get("EGRYSA_INBOUND_KEYS") ?? "").split(",").map((key) => key.trim())
+      .filter(Boolean);
     if (!keys.length || keys.some((key) => key.length < 24)) {
       throw new Error(
-        "SOVEREIGNLOOP_INBOUND_KEYS must contain long, random keys of at least 24 characters",
+        "EGRYSA_INBOUND_KEYS must contain long, random keys of at least 24 characters",
       );
     }
     return new InboundAuth(await Promise.all(keys.map(sha256)));

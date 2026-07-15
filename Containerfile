@@ -9,4 +9,4 @@ COPY --chown=65532:65532 config ./config
 USER 65532:65532
 EXPOSE 8787
 ENTRYPOINT ["/usr/local/bin/deno"]
-CMD ["run", "--frozen", "--cached-only", "--no-prompt", "--allow-read=/app/config", "--allow-env=SOVEREIGNLOOP_CONFIG,SOVEREIGNLOOP_INBOUND_KEYS,SOVEREIGNLOOP_RECEIPT_HMAC_KEY,OPENAI_API_KEY,ANTHROPIC_API_KEY", "--allow-net=0.0.0.0:8787,api.openai.com,api.anthropic.com,localhost:11434", "/app/src/main.ts"]
+CMD ["run", "--frozen", "--cached-only", "--no-prompt", "--allow-read=/app/config", "--allow-env=EGRYSA_CONFIG,EGRYSA_INBOUND_KEYS,EGRYSA_RECEIPT_HMAC_KEY,OPENAI_API_KEY,ANTHROPIC_API_KEY", "--allow-net=0.0.0.0:8787,api.openai.com,api.anthropic.com,localhost:11434", "/app/src/main.ts"]

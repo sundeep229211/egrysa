@@ -11,7 +11,7 @@ interface EvalCase {
   expectedDecision: Decision;
 }
 
-const config = await loadConfig("config/sovereignloop.example.json");
+const config = await loadConfig("config/egrysa.example.json");
 const rows = (await Deno.readTextFile("evals/cases.jsonl")).trim().split("\n").map((line) =>
   JSON.parse(line) as EvalCase
 );
@@ -37,7 +37,7 @@ for (const row of rows) {
 
 const elapsed = performance.now() - started;
 const report = {
-  suite: "sovereignloop-synthetic-v1",
+  suite: "egrysa-synthetic-v1",
   cases: rows.length,
   exactKindAccuracy: correctKinds / rows.length,
   decisionAccuracy: correctDecisions / rows.length,

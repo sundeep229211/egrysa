@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: SovereignLoop Gateway API
+  title: Egrysa Gateway API
   version: 0.1.0
   description: Text-only, OpenAI-compatible enterprise AI egress control boundary.
 servers:
@@ -22,7 +22,6 @@ paths:
         "200": { description: Configuration loaded }
   /metrics:
     get:
-      security: []
       operationId: metrics
       responses:
         "200":
@@ -34,7 +33,7 @@ paths:
       operationId: createChatCompletion
       parameters:
         - in: header
-          name: x-sovereignloop-provider
+          name: x-egrysa-provider
           required: false
           schema: { type: string }
           description: Requested configured provider. Policy can override it.
@@ -47,8 +46,8 @@ paths:
         "200":
           description: OpenAI-compatible non-streaming response
           headers:
-            x-sovereignloop-decision: { schema: { enum: [allow_raw, transform, local_only] } }
-            x-sovereignloop-receipt: { schema: { type: string, format: uuid } }
+            x-egrysa-decision: { schema: { enum: [allow_raw, transform, local_only] } }
+            x-egrysa-receipt: { schema: { type: string, format: uuid } }
           content:
             application/json: { schema: { type: object } }
         "401": { $ref: "#/components/responses/Problem" }
@@ -66,7 +65,7 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
-          description: Content-free privacy receipt
+          description: Content-minimized signed policy receipt
           content:
             application/json: { schema: { $ref: "#/components/schemas/Receipt" } }
         "404": { $ref: "#/components/responses/Problem" }
@@ -81,7 +80,7 @@ components:
   schemas:
     ChatRequest:
       type: object
-      additionalProperties: true
+      additionalProperties: false
       required: [model, messages]
       properties:
         model: { type: string }
@@ -97,17 +96,19 @@ components:
               role: { enum: [system, user, assistant] }
               content: { type: string }
         stream: { const: false, default: false }
-        tools: { not: {} }
-        tool_choice: { not: {} }
-        temperature: { type: number }
-        max_tokens: { type: integer, minimum: 1 }
+        temperature: { type: number, minimum: 0, maximum: 2 }
+        max_tokens: { type: integer, minimum: 1, maximum: 1000000 }
+        top_p: { type: number, minimum: 0, maximum: 1 }
+        frequency_penalty: { type: number, minimum: -2, maximum: 2 }
+        presence_penalty: { type: number, minimum: -2, maximum: 2 }
+        seed: { type: integer }
     Receipt:
       type: object
       required: [
         version,
         id,
         timestamp,
-        requestHash,
+        requestFingerprint,
         decision,
         model,
         findingCounts,
@@ -121,7 +122,7 @@ components:
         version: { const: "1" }
         id: { type: string, format: uuid }
         timestamp: { type: string, format: date-time }
-        requestHash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        requestFingerprint: { type: string, pattern: "^[a-f0-9]{64}$" }
         decision: { enum: [allow_raw, transform, local_only, deny] }
         provider: { type: [string, "null"] }
         model: { type: string }

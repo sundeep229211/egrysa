@@ -1,13 +1,16 @@
-export type FindingKind =
-  | "email"
-  | "phone"
-  | "ipv4"
-  | "iban"
-  | "ssn"
-  | "credit_card"
-  | "private_key"
-  | "api_secret"
-  | "confidential_term";
+export const FINDING_KINDS = [
+  "email",
+  "phone",
+  "ipv4",
+  "iban",
+  "ssn",
+  "credit_card",
+  "private_key",
+  "api_secret",
+  "confidential_term",
+] as const;
+
+export type FindingKind = typeof FINDING_KINDS[number];
 
 export type Decision = "allow_raw" | "transform" | "local_only" | "deny";
 
@@ -62,16 +65,17 @@ export interface ChatRequest {
   stream?: boolean;
   temperature?: number;
   max_tokens?: number;
-  tools?: unknown;
-  tool_choice?: unknown;
-  [key: string]: unknown;
+  top_p?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  seed?: number;
 }
 
 export interface PrivacyReceipt {
   version: "1";
   id: string;
   timestamp: string;
-  requestHash: string;
+  requestFingerprint: string;
   decision: Decision;
   provider: string | null;
   model: string;

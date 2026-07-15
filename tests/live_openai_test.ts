@@ -3,7 +3,7 @@ import type { ProviderConfig } from "../src/types.ts";
 
 Deno.test({
   name: "live OpenAI provider smoke test",
-  ignore: Deno.env.get("SOVEREIGNLOOP_LIVE_TEST") !== "1",
+  ignore: Deno.env.get("EGRYSA_LIVE_TEST") !== "1",
   async fn() {
     const provider: ProviderConfig = {
       id: "openai",
@@ -15,12 +15,12 @@ Deno.test({
     };
     const response = await invokeProvider(provider, {
       model: "gpt-5.6-luna",
-      messages: [{ role: "user", content: "Reply with exactly: sovereign" }],
+      messages: [{ role: "user", content: "Reply with exactly: egrysa" }],
     }, 30_000);
     const content =
       ((response.choices as Array<Record<string, unknown>>)[0]?.message as Record<string, unknown>)
         ?.content;
-    if (typeof content !== "string" || !content.toLowerCase().includes("sovereign")) {
+    if (typeof content !== "string" || !content.toLowerCase().includes("egrysa")) {
       throw new Error("unexpected live response");
     }
   },

@@ -1,17 +1,17 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: sovereignloop-default-deny
+  name: egrysa-default-deny
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: sovereignloop
+      app.kubernetes.io/name: egrysa
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - namespaceSelector:
             matchLabels:
-              sovereignloop.io/client: "true"
+              egrysa.io/client: "true"
       ports:
         - { protocol: TCP, port: 8787 }
   egress:

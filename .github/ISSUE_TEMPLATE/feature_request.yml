@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose a scoped capability or control.
+title: "proposal: "
+labels: [proposal]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What risk or workflow needs to change?
+    validations: { required: true }
+  - type: textarea
+    id: boundary
+    attributes:
+      label: Trust-boundary impact
+      description: Identify new data, permissions, providers, persistence, or tools.
+    validations: { required: true }
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Acceptance evidence
+      description: How should the change be tested or measured?
+    validations: { required: true }

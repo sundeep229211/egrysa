@@ -1,4 +1,4 @@
-# SovereignLoop: canonical product truth
+# Egrysa: canonical product truth
 
 ## Mission
 
@@ -7,9 +7,9 @@ while making frontier models replaceable compute suppliers.
 
 ## Product claim
 
-SovereignLoop is a customer-owned AI egress control plane. It reduces disclosure through
-deterministic blocking, minimization, request-scoped surrogates, local-only routing, and
-content-free evidence.
+Egrysa is a customer-owned AI egress control plane. It reduces disclosure through deterministic
+blocking, minimization, request-scoped surrogates, local-only routing, and content-minimized,
+cryptographically signed policy evidence.
 
 It is not a VPN, an anonymity guarantee, a DLP replacement, a compliance certificate, or proof that
 a model provider forgot data. Inference requests do not directly update model weights; provider
@@ -19,8 +19,8 @@ governed by product behavior and contract.
 ## Current state
 
 Built: text-only OpenAI-compatible gateway, deterministic classification, policy engine,
-local/remote routing, OpenAI and Anthropic adapters, local recomposition, content-free receipts,
-tests, synthetic evals, CI, and hardened deployment examples.
+local/remote routing, OpenAI and Anthropic adapters, local recomposition, content-minimized
+receipts, tests, synthetic evals, CI, and hardened deployment examples.
 
 Not built: probabilistic NER, identity federation, tenant administration, persistent evidence
 export, HSM signing, multimodal inspection, tools, streaming, cross-provider decomposition,

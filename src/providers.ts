@@ -86,7 +86,7 @@ async function invokeAnthropic(
     String(block.text ?? "")
   ).join("");
   return {
-    id: raw.id ?? `sl-${crypto.randomUUID()}`,
+    id: raw.id ?? `egrysa-${crypto.randomUUID()}`,
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
     model: raw.model ?? request.model,
@@ -100,7 +100,7 @@ async function invokeAnthropic(
 }
 
 function sanitizeOpenAiRequest(request: ChatRequest): Record<string, unknown> {
-  const allowed = [
+  const allowed: Array<keyof ChatRequest> = [
     "model",
     "messages",
     "temperature",
@@ -108,8 +108,6 @@ function sanitizeOpenAiRequest(request: ChatRequest): Record<string, unknown> {
     "top_p",
     "frequency_penalty",
     "presence_penalty",
-    "stop",
-    "response_format",
     "seed",
   ];
   const body: Record<string, unknown> = {};

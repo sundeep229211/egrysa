@@ -2,15 +2,30 @@
 
 ## Reporting
 
-Do not open a public issue for a suspected vulnerability. Until a private project mailbox is
-established, contact the repository owner through the existing private business channel and include
-only reproduction metadata. Do not include real customer data, provider keys, client keys, prompts,
-responses, or surrogate maps.
+Do not open a public issue for a suspected vulnerability. Use **Security → Report a vulnerability**
+in the GitHub repository to create a private security advisory. Public release is blocked until the
+repository owner has enabled GitHub private vulnerability reporting and verified the workflow from a
+non-maintainer account.
+
+Include only synthetic reproduction data. Do not include customer data, provider keys, client keys,
+prompts, responses, or surrogate maps. If private reporting is unavailable, do not send sensitive
+details through an issue, discussion, chat, or unsolicited email; notify the maintainer publicly
+only that the private reporting channel is unavailable.
 
 ## Supported versions
 
-This repository is an unreleased MVP. No version currently receives a production security-support
-commitment.
+| Version           | Support                                                       |
+| ----------------- | ------------------------------------------------------------- |
+| Unreleased `main` | Best-effort security fixes; no production SLA                 |
+| `0.1.x-alpha`     | Planned 90-day critical-fix window after first public release |
+
+No version currently receives a production security-support commitment.
+
+## Response targets
+
+- Acknowledge a private report within three business days.
+- Provide an initial severity assessment within seven business days.
+- Coordinate disclosure after a fix is available; timing depends on severity and downstream risk.
 
 ## Handling rules
 

@@ -12,24 +12,23 @@ Enterprise AI requests may contain regulated data, credentials, internal identif
 plans, and patterns that reveal how the organization operates. Provider promises reduce risk but do
 not give the customer an independent enforcement point or request-level evidence.
 
-SovereignLoop inserts that enforcement point inside the customer boundary. It blocks secrets,
-replaces selected identifiers with request-scoped surrogates, forces designated topics to local
-inference, restricts models and endpoints, and records what policy was applied without recording
-content.
+Egrysa inserts that enforcement point inside the customer boundary. It blocks secrets, replaces
+selected identifiers with request-scoped surrogates, forces designated topics to local inference,
+restricts models and endpoints, and records what policy was applied without recording content.
 
 ## Evidence available now
 
-| Control                      | Repository evidence                                                                 | Residual risk                                                            |
-| ---------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| No raw content logging       | Structured logger records event type only; receipts contain hashes and counts       | Runtime or host compromise can still observe process memory              |
-| Secret denial                | Deterministic rules plus regression tests                                           | Unknown secret formats and obfuscation may evade rules                   |
-| PII transformation           | Request-scoped surrogate map and local recomposition                                | Entity detection is not comprehensive; output quality may change         |
-| Confidential routing         | Configured terms force a local provider                                             | Taxonomy must be maintained; conceptual references may evade exact terms |
-| Provider restriction         | HTTPS, model allowlists, fixed base URLs, no redirects                              | DNS, CA, provider account, and contract remain external dependencies     |
-| Provider non-storage request | `store:false` forced for OpenAI-compatible calls                                    | This is not proof of deletion or ZDR entitlement                         |
-| Audit evidence               | HMAC-signed, hash-chained, content-free receipts                                    | In-memory receipt store is not durable and uses a software-held key      |
-| Runtime confinement          | Deno scoped permissions; Kubernetes non-root/read-only/seccomp/network policy       | Cluster and host controls remain customer responsibilities               |
-| Supply chain                 | Zero third-party runtime packages, pinned CI actions, SBOM and provenance workflows | Base images and build platform still require verification                |
+| Control                      | Repository evidence                                                                       | Residual risk                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| No raw content logging       | Structured logger records event type only; receipts contain keyed fingerprints and counts | Runtime or host compromise can still observe process memory              |
+| Secret denial                | Deterministic rules plus regression tests                                                 | Unknown secret formats and obfuscation may evade rules                   |
+| PII transformation           | Request-scoped surrogate map and local recomposition                                      | Entity detection is not comprehensive; output quality may change         |
+| Confidential routing         | Configured terms force a local provider                                                   | Taxonomy must be maintained; conceptual references may evade exact terms |
+| Provider restriction         | HTTPS, model allowlists, fixed base URLs, no redirects                                    | DNS, CA, provider account, and contract remain external dependencies     |
+| Provider non-storage request | `store:false` forced for OpenAI-compatible calls                                          | This is not proof of deletion or ZDR entitlement                         |
+| Audit evidence               | HMAC-signed receipts; keyed, nonce-bound request fingerprint; no raw content              | Single-process store is ephemeral and uses a software-held key           |
+| Runtime confinement          | Deno scoped permissions; Kubernetes non-root/read-only/seccomp/network policy             | Cluster and host controls remain customer responsibilities               |
+| Supply chain                 | Zero third-party runtime packages, pinned CI actions, SBOM and provenance workflows       | Base images and build platform still require verification                |
 
 ## Evaluation boundary
 

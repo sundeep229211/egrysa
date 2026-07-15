@@ -1,18 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sovereignloop
+  name: egrysa
   labels:
-    app.kubernetes.io/name: sovereignloop
+    app.kubernetes.io/name: egrysa
 spec:
-  replicas: 2
+  # v0.1 receipts are process-local and ephemeral. Scale only after configuring a durable backend.
+  replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: sovereignloop
+      app.kubernetes.io/name: egrysa
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: sovereignloop
+        app.kubernetes.io/name: egrysa
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -24,7 +25,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: gateway
-          image: ghcr.io/replace-with-org/sovereignloop:0.1.0
+          # REQUIRED: replace the all-zero digest with a verified release digest before applying.
+          image: ghcr.io/replace-with-org/egrysa@sha256:0000000000000000000000000000000000000000000000000000000000000000
           imagePullPolicy: IfNotPresent
           args:
             - run
@@ -32,21 +34,21 @@ spec:
             - --cached-only
             - --no-prompt
             - --allow-read=/app/config
-            - --allow-env=SOVEREIGNLOOP_CONFIG,SOVEREIGNLOOP_INBOUND_KEYS,SOVEREIGNLOOP_RECEIPT_HMAC_KEY,OPENAI_API_KEY
-            - --allow-net=0.0.0.0:8787,api.openai.com
+            - --allow-env=EGRYSA_CONFIG,EGRYSA_INBOUND_KEYS,EGRYSA_RECEIPT_HMAC_KEY,OPENAI_API_KEY
+            - --allow-net=0.0.0.0:8787,api.openai.com,localhost:11434
             - /app/src/main.ts
           env:
-            - name: SOVEREIGNLOOP_CONFIG
-              value: /app/config/sovereignloop.json
-            - name: SOVEREIGNLOOP_INBOUND_KEYS
+            - name: EGRYSA_CONFIG
+              value: /app/config/egrysa.json
+            - name: EGRYSA_INBOUND_KEYS
               valueFrom:
-                secretKeyRef: { name: sovereignloop-secrets, key: inbound-keys }
-            - name: SOVEREIGNLOOP_RECEIPT_HMAC_KEY
+                secretKeyRef: { name: egrysa-secrets, key: inbound-keys }
+            - name: EGRYSA_RECEIPT_HMAC_KEY
               valueFrom:
-                secretKeyRef: { name: sovereignloop-secrets, key: receipt-hmac-key }
+                secretKeyRef: { name: egrysa-secrets, key: receipt-hmac-key }
             - name: OPENAI_API_KEY
               valueFrom:
-                secretKeyRef: { name: sovereignloop-secrets, key: openai-api-key }
+                secretKeyRef: { name: egrysa-secrets, key: openai-api-key }
           ports:
             - { name: http, containerPort: 8787, protocol: TCP }
           readinessProbe:
@@ -70,7 +72,7 @@ spec:
             - { name: tmp, mountPath: /tmp }
       volumes:
         - name: config
-          configMap: { name: sovereignloop-config }
+          configMap: { name: egrysa-config }
         - name: tmp
           emptyDir: { medium: Memory, sizeLimit: 16Mi }
       topologySpreadConstraints:
@@ -79,4 +81,4 @@ spec:
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
-              app.kubernetes.io/name: sovereignloop
+              app.kubernetes.io/name: egrysa
