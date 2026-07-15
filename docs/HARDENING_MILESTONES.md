@@ -18,7 +18,7 @@ later gate cannot compensate for a failed earlier one.
 | Private vulnerability reporting has a monitored route                                | Policy written; GitHub setting unavailable for the private repository |
 | No repository secret, personal local file, or invalid release identity               | Signed commits verified; current diff and history secret scans pass   |
 | Product name has counsel-reviewed knockout                                           | Egrysa selected; founder reports legal screening complete             |
-| At least one real remote-provider generation and one local-provider path pass        | Local passed; remote key accepted but quota rejected generation       |
+| At least one real remote-provider generation and one local-provider path pass        | Local gateway path and authorized remote adapter smoke test passed    |
 | Container and Kubernetes examples run under documented restrictions                  | Container and Calico/kind runtime restrictions validated locally      |
 
 **Release label:** `v0.1.0-alpha.1`, evaluation-only. No production, certification, anonymity, or

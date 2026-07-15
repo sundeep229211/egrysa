@@ -30,11 +30,9 @@ The score is not a compliance or security rating and should not be quoted as an 
 
 ## Publication blockers
 
-1. Complete one authorized remote-provider generation when working quota is available. The key was
-   accepted, but the provider returned `insufficient_quota`; no billing change is authorized.
-2. After explicit publication approval, enable free public branch protection, CodeQL, dependency
+1. After explicit publication approval, enable free public branch protection, CodeQL, dependency
    review, secret scanning, push protection, and private vulnerability reporting; then rerun CI.
-3. From protected `main`, verify the public tagged workflow's immutable registry digest,
+2. From protected `main`, verify the public tagged workflow's immutable registry digest,
    vulnerability result, CycloneDX SBOM attestation, signature, and provenance before announcing a
    release.
 
@@ -48,7 +46,11 @@ The score is not a compliance or security rating and should not be quoted as an 
   Kubernetes 1.36.1 with Calico 3.32.1. Labelled ingress and public HTTPS egress passed; unlabelled
   ingress and private ClusterIP egress timed out.
 - A loopback Ollama `gpt-oss:20b` generation routed through Egrysa as `local_only` and emitted a
-  signed, content-minimized receipt. No remote-generation success is claimed.
+  signed, content-minimized receipt.
+- One authorized OpenAI-compatible provider-adapter request used a non-sensitive prompt and returned
+  the expected marker from `gpt-5.2`. The smoke test validates credential, quota, model access,
+  request sanitization, and response parsing at test time; it does not prove provider retention or
+  deletion behavior or exercise the full policy-gateway path.
 - Commits `d7af06e` and `6119e27` were signed with the configured SSH signing key and reported as
   verified by GitHub.
 - A clean temporary clone passed formatting, linting, type checks, 15 tests, 12/12 synthetic
@@ -67,11 +69,11 @@ The score is not a compliance or security rating and should not be quoted as an 
   Every advisory now has a recorded applicability and residual-risk disposition in the
   [SBOM advisory triage](SBOM_TRIAGE.md). This is not a claim that the image has no known
   vulnerabilities.
-- Private CI run [`29410826163`](https://github.com/sundeep229211/egrysa/actions/runs/29410826163)
-  passed at exact branch head `8528ee0008cb14e9f2917893daef4f4b886f6905`, including the independent
-  Trivy filesystem vulnerability, secret, and misconfiguration baseline. Native CodeQL and
-  dependency review were intentionally deferred by repository visibility and remain mandatory at
-  public cutover.
+- Private CI run [`29411056348`](https://github.com/sundeep229211/egrysa/actions/runs/29411056348)
+  passed at commit `4b1a3e704ebb0064669955771294283fcfe48cbd`, including the independent Trivy
+  filesystem vulnerability, secret, and misconfiguration baseline. Native CodeQL and dependency
+  review were intentionally deferred by repository visibility and remain mandatory at public
+  cutover.
 
 ## Not blockers for the public alpha
 

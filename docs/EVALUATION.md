@@ -8,23 +8,22 @@ Suite: `egrysa-synthetic-v1`
 
 ## Results
 
-| Gate                                         |                                                Result |
-| -------------------------------------------- | ----------------------------------------------------: |
-| Unit/integration tests                       |                                   15 passed, 0 failed |
-| Expected data-class decisions                |                                                 12/12 |
-| Exact expected finding sets                  |                                                 12/12 |
-| High-severity secret egress                  |                                                     0 |
-| Mean classifier plus policy time             |               0.14-0.36 ms across repeated local runs |
-| Raw prompt persistence by evaluation harness |                                                 false |
-| End-to-end surrogate/recomposition path      |                    passed against local HTTP upstream |
-| Standalone arm64 binary                      |                                 compiled successfully |
-| Hardened container runtime                   |                    passed with restricted host launch |
-| Local image high/critical vulnerability scan |                                   0 detected by Trivy |
-| Local CycloneDX SBOM                         |                          generated with 11 components |
-| Kubernetes manifest and policy runtime       |        passed on Kubernetes 1.36.1 with Calico 3.32.1 |
-| Ollama local generation through Egrysa       |  passed with `local_only` decision and signed receipt |
-| OpenAI credential/authentication             |                        `/v1/models` returned HTTP 200 |
-| OpenAI generation                            | not validated; provider returned `insufficient_quota` |
+| Gate                                         |                                               Result |
+| -------------------------------------------- | ---------------------------------------------------: |
+| Unit/integration tests                       |                                  15 passed, 0 failed |
+| Expected data-class decisions                |                                                12/12 |
+| Exact expected finding sets                  |                                                12/12 |
+| High-severity secret egress                  |                                                    0 |
+| Mean classifier plus policy time             |              0.14-0.36 ms across repeated local runs |
+| Raw prompt persistence by evaluation harness |                                                false |
+| End-to-end surrogate/recomposition path      |                   passed against local HTTP upstream |
+| Standalone arm64 binary                      |                                compiled successfully |
+| Hardened container runtime                   |                   passed with restricted host launch |
+| Local image high/critical vulnerability scan |                                  0 detected by Trivy |
+| Local CycloneDX SBOM                         |                         generated with 11 components |
+| Kubernetes manifest and policy runtime       |       passed on Kubernetes 1.36.1 with Calico 3.32.1 |
+| Ollama local generation through Egrysa       | passed with `local_only` decision and signed receipt |
+| OpenAI provider-adapter generation           |           passed one authorized `gpt-5.2` smoke test |
 
 ## Runtime evidence
 
@@ -50,6 +49,12 @@ A local Ollama `gpt-oss:20b` request containing a synthetic confidential term ro
 with decision `local_only`, provider `local`, and a signed receipt. The receipt recorded one
 `confidential_term`, `rawContentPersisted=false`, and `providerStoreRequested=false`. Only minimized
 metadata was retained for this evaluation.
+
+One authorized OpenAI-compatible provider-adapter request used a non-sensitive instruction and
+returned the expected marker from `gpt-5.2`. This validates the configured credential, available
+quota, model access, request sanitization, and response parsing at test time. It does not exercise
+the full policy-gateway path, establish production reliability, or prove provider retention or
+deletion behavior.
 
 ## Interpretation
 
