@@ -24,7 +24,8 @@ the public tagged workflow.
 
 Passing the high/critical gate is not a no-vulnerability claim. Retain the complete SBOM and record
 the disposition of every advisory, including findings whose selected vendor severity is below the
-blocking threshold or whose alternative-source rating is higher.
+blocking threshold or whose alternative-source rating is higher. The current base-image findings and
+recheck policy are recorded in [the SBOM advisory triage](SBOM_TRIAGE.md).
 
 ## Automated evidence
 

@@ -110,6 +110,7 @@ The response headers contain `x-egrysa-decision` and `x-egrysa-receipt`.
 - [Threat model](docs/THREAT_MODEL.md)
 - [Control mapping](docs/COMPLIANCE.md)
 - [Evaluation record](docs/EVALUATION.md)
+- [Release-image SBOM advisory triage](docs/SBOM_TRIAGE.md)
 - [Research roadmap](docs/RESEARCH_ROADMAP.md)
 - [Preliminary naming screen](docs/NAMING.md)
 - [Public-readiness review](docs/PUBLIC_READINESS.md)
