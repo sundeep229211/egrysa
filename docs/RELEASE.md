@@ -8,8 +8,9 @@
 - GitHub private vulnerability reporting is enabled and tested.
 - The tag is annotated and signed by an authorized maintainer.
 
-These public controls become available on the free GitHub plan after the repository is public. Do
-not create the first tag until the publication cutover below has enabled and tested them.
+These controls are enabled on the public repository. Do not create the first tag until dependency
+review has passed in a public pull request and private vulnerability reporting has been tested from
+a non-maintainer account.
 
 ## Private no-payment staging
 
@@ -54,6 +55,18 @@ manifest is an intentional fail-closed placeholder.
 
 If any control cannot be enabled or any scan fails, stop the cutover. Do not weaken a workflow or
 publish a release to work around the failure.
+
+### Cutover status on 2026-07-15
+
+- Steps 1 through 5 are complete: the repository is public, `main` is protected, signed commits are
+  required, and CodeQL, secret scanning, push protection, Dependabot security updates, and private
+  vulnerability reporting are enabled.
+- Public CI run [`29415491535`](https://github.com/sundeep229211/egrysa/actions/runs/29415491535)
+  passed source verification, the independent security baseline, and CodeQL on protected `main`.
+- Dependency review requires pull-request context and remains a required check on the public
+  evidence pull request. The private reporting route still requires a test from a non-maintainer
+  account.
+- No public tag, package image, or GitHub release has been created.
 
 ## Alpha versioning
 

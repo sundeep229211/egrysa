@@ -4,37 +4,35 @@ Review date: 2026-07-15
 
 ## Recommendation
 
-**No-go for public release today.** The private repository, signed runtime-readiness commits,
-container, Kubernetes, and local-provider runtime gates have evidence. Egrysa is selected and the
-founder reports legal screening complete. The no-payment path keeps GitHub-native CodeQL and
-dependency review disabled only while the repository is private, adds an independent private
-security baseline and non-publishing release dry run, and activates the native gates at the
-controlled public cutover. Remaining blockers are recorded below rather than hidden by weakened
+**Go for public source alpha review; no-go for a tagged or announced release today.** The repository
+is public with protected `main`, required signed commits, native security controls, and a passing
+public CI baseline. The signed runtime-readiness commits, container, Kubernetes, and local-provider
+runtime gates also have evidence. Egrysa is selected and the founder reports legal screening
+complete. The remaining release blockers are recorded below rather than hidden by weakened
 workflows.
 
 ## Scorecard
 
-| Area                               | Score | Evidence                                                                                                                        | Main gap                                                                                          |
-| ---------------------------------- | ----: | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Security boundary                  |  8/10 | Fail-closed taxonomy; strict request field surface; local-only endpoint enforcement; authenticated metrics; keyed receipts      | Deterministic detection remains incomplete; bearer auth and software-held keys are alpha controls |
-| Code and local verification        |  8/10 | Strict TypeScript; 15 tests pass; 12/12 synthetic eval decisions/findings; Deno dependency audit passed; standalone compilation | Small, implementation-authored corpus; no load or independent adversarial test                    |
-| Documentation and claim discipline |  9/10 | CISO brief, threat model, architecture, compliance crosswalk, operations, release, support, research, and explicit non-claims   | External reviewer has not yet performed a clean-room install or claim audit                       |
-| Supply chain and release           |  8/10 | Pinned actions; private dry-run build; Debian-vendor high/critical gate passed; 11-component CycloneDX SBOM; advisory triage    | Registry signature, attestation, and provenance await the public tag                              |
-| Open-source governance             |  8/10 | Private GitHub repository, Apache-2.0, governance documents, issue forms, Dependabot alerts, and private-reporting policy       | Native CodeQL, dependency review, private reporting, and branch rules await public cutover        |
-| Name and legal                     |  7/10 | Egrysa selected; preliminary screen and exact namespace refresh retained; founder reports external legal screening complete     | Legal work is not reproduced here; crates.io check was inconclusive; recheck at cutover           |
-| Enterprise production              |  4/10 | Hardened single-node baseline and explicit responsibility model                                                                 | No OIDC, HA evidence, durable receipts, KMS/HSM, SIEM, pen test, SLO, DR, or certification scope  |
+| Area                               | Score | Evidence                                                                                                                            | Main gap                                                                                           |
+| ---------------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Security boundary                  |  8/10 | Fail-closed taxonomy; strict request field surface; local-only endpoint enforcement; authenticated metrics; keyed receipts          | Deterministic detection remains incomplete; bearer auth and software-held keys are alpha controls  |
+| Code and local verification        |  8/10 | Strict TypeScript; 15 tests pass; 12/12 synthetic eval decisions/findings; Deno dependency audit passed; standalone compilation     | Small, implementation-authored corpus; no load or independent adversarial test                     |
+| Documentation and claim discipline |  9/10 | CISO brief, threat model, architecture, compliance crosswalk, operations, release, support, research, and explicit non-claims       | External reviewer has not yet performed a clean-room install or claim audit                        |
+| Supply chain and release           |  8/10 | Pinned actions; private dry-run build; Debian-vendor high/critical gate passed; 11-component CycloneDX SBOM; advisory triage        | Registry signature, attestation, and provenance await the public tag                               |
+| Open-source governance             |  8/10 | Public GitHub repository, Apache-2.0, protected signed-commit workflow, native security controls, issue forms, and reporting policy | Dependency review needs public-PR evidence; private reporting needs a non-maintainer workflow test |
+| Name and legal                     |  7/10 | Egrysa selected; preliminary screen and exact namespace refresh retained; founder reports external legal screening complete         | Legal work is not reproduced here; the crates.io check was inconclusive                            |
+| Enterprise production              |  4/10 | Hardened single-node baseline and explicit responsibility model                                                                     | No OIDC, HA evidence, durable receipts, KMS/HSM, SIEM, pen test, SLO, DR, or certification scope   |
 
 **Overall:** 7.5/10 for a public alpha source release; 4/10 for production enterprise use.
 
 The score is not a compliance or security rating and should not be quoted as an assurance claim.
 
-## Publication blockers
+## Tagged-release blockers
 
-1. After explicit publication approval, enable free public branch protection, CodeQL, dependency
-   review, secret scanning, push protection, and private vulnerability reporting; then rerun CI.
-2. From protected `main`, verify the public tagged workflow's immutable registry digest,
-   vulnerability result, CycloneDX SBOM attestation, signature, and provenance before announcing a
-   release.
+1. Pass dependency review in a public pull request and verify the private vulnerability reporting
+   workflow from a non-maintainer account.
+2. From protected `main`, verify the tagged workflow's immutable registry digest, vulnerability
+   result, CycloneDX SBOM attestation, signature, and provenance before announcing a release.
 
 ## Completed runtime evidence
 
@@ -71,9 +69,19 @@ The score is not a compliance or security rating and should not be quoted as an 
   vulnerabilities.
 - Private CI run [`29411056348`](https://github.com/sundeep229211/egrysa/actions/runs/29411056348)
   passed at commit `4b1a3e704ebb0064669955771294283fcfe48cbd`, including the independent Trivy
-  filesystem vulnerability, secret, and misconfiguration baseline. Native CodeQL and dependency
-  review were intentionally deferred by repository visibility and remain mandatory at public
-  cutover.
+  filesystem vulnerability, secret, and misconfiguration baseline.
+- The repository became public on 2026-07-15. Protected `main` now requires pull requests, signed
+  commits, resolved conversations, and strict success from `Test and audit`, `Security baseline`,
+  `CodeQL`, and `Dependency review`. Administrators are included; force pushes and branch deletion
+  are disabled.
+- Secret scanning, push protection, Dependabot vulnerability alerts and security updates, private
+  vulnerability reporting, and read-only default workflow permissions are enabled. At cutover,
+  GitHub reported zero open CodeQL, Dependabot, and secret-scanning alerts. This records repository
+  state at review time, not a claim that the software has no vulnerabilities.
+- Public CI run [`29415491535`](https://github.com/sundeep229211/egrysa/actions/runs/29415491535)
+  passed `Test and audit`, `Security baseline`, and `CodeQL` on protected `main`.
+  `Dependency review` was correctly skipped because the run was a manual dispatch rather than a pull
+  request; it remains a required check and must pass on the public evidence pull request.
 
 ## Not blockers for the public alpha
 
