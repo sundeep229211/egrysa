@@ -98,7 +98,7 @@ Requirements: Deno 2.9.2. The repository has no external code dependencies.
    curl http://127.0.0.1:8787/v1/chat/completions \
      -H "Authorization: Bearer $EGRYSA_CLIENT_KEY" \
      -H "Content-Type: application/json" \
-     -d '{"model":"gpt-5.6-luna","messages":[{"role":"user","content":"Email alex@example.com with a two-line summary."}]}'
+     -d '{"model":"gpt-5.2","messages":[{"role":"user","content":"Email alex@example.com with a two-line summary."}]}'
    ```
 
 The response headers contain `x-egrysa-decision` and `x-egrysa-receipt`.
@@ -110,6 +110,7 @@ The response headers contain `x-egrysa-decision` and `x-egrysa-receipt`.
 - [Threat model](docs/THREAT_MODEL.md)
 - [Control mapping](docs/COMPLIANCE.md)
 - [Evaluation record](docs/EVALUATION.md)
+- [Release-image SBOM advisory triage](docs/SBOM_TRIAGE.md)
 - [Research roadmap](docs/RESEARCH_ROADMAP.md)
 - [Preliminary naming screen](docs/NAMING.md)
 - [Public-readiness review](docs/PUBLIC_READINESS.md)

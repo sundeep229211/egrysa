@@ -7,19 +7,19 @@ later gate cannot compensate for a failed earlier one.
 
 **Purpose:** publish an inspectable alpha without implying production or compliance readiness.
 
-| Required evidence                                                                    | Current state                                                          |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| Strict format, lint, type, unit/integration, and synthetic evaluation pass           | Passed locally                                                         |
-| Policy configuration rejects missing, duplicate, and unknown data classes            | Implemented and tested                                                 |
-| Receipts contain no raw-content digest usable for offline guessing                   | Keyed, nonce-bound fingerprint implemented and tested                  |
-| Process-local receipt chain cannot be deployed as false multi-replica evidence       | Deployment fixed at one replica; limitation documented                 |
-| Tagged release cannot bypass tests, audit, image scan, SBOM, provenance, and signing | Workflow implemented; must pass once on public GitHub                  |
-| Deployment image is immutable                                                        | Digest placeholder fails closed until the release digest is supplied   |
-| Private vulnerability reporting has a monitored route                                | Policy written; GitHub setting and test report pending                 |
-| No repository secret, personal local file, or invalid release identity               | Identity supplied; signed commit and final secret/history scan pending |
-| Product name has counsel-reviewed knockout                                           | Egrysa selected; founder reports legal screening complete              |
-| At least one real remote-provider generation and one local-provider path pass        | Mock loopback passed; authorized local and remote generations pending  |
-| Container and Kubernetes examples run under documented restrictions                  | Static config present; runtime proof pending                           |
+| Required evidence                                                                    | Current state                                                         |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| Strict format, lint, type, unit/integration, and synthetic evaluation pass           | Passed locally: 15 tests and 12/12 synthetic cases                    |
+| Policy configuration rejects missing, duplicate, and unknown data classes            | Implemented and tested                                                |
+| Receipts contain no raw-content digest usable for offline guessing                   | Keyed, nonce-bound fingerprint implemented and tested                 |
+| Process-local receipt chain cannot be deployed as false multi-replica evidence       | Deployment fixed at one replica; limitation documented                |
+| Tagged release cannot bypass tests, audit, image scan, SBOM, provenance, and signing | Private dry run `29397265834` passed; public signing remains pending  |
+| Deployment image is immutable                                                        | Digest placeholder fails closed until the release digest is supplied  |
+| Private vulnerability reporting has a monitored route                                | Policy written; GitHub setting unavailable for the private repository |
+| No repository secret, personal local file, or invalid release identity               | Signed commits verified; current diff and history secret scans pass   |
+| Product name has counsel-reviewed knockout                                           | Egrysa selected; founder reports legal screening complete             |
+| At least one real remote-provider generation and one local-provider path pass        | Local gateway path and authorized remote adapter smoke test passed    |
+| Container and Kubernetes examples run under documented restrictions                  | Container and Calico/kind runtime restrictions validated locally      |
 
 **Release label:** `v0.1.0-alpha.1`, evaluation-only. No production, certification, anonymity, or
 provider-deletion claim.

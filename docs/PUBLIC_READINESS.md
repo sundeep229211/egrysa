@@ -4,22 +4,25 @@ Review date: 2026-07-15
 
 ## Recommendation
 
-**No-go for public release today.** The repository is suitable for a private technical review and is
-close to a clearly labelled public alpha. Egrysa is selected and the founder reports legal screening
-complete. The remaining public-alpha blockers are a signed reviewed commit and externally executed
-evidence—not missing enterprise features.
+**No-go for public release today.** The private repository, signed runtime-readiness commits,
+container, Kubernetes, and local-provider runtime gates have evidence. Egrysa is selected and the
+founder reports legal screening complete. The no-payment path keeps GitHub-native CodeQL and
+dependency review disabled only while the repository is private, adds an independent private
+security baseline and non-publishing release dry run, and activates the native gates at the
+controlled public cutover. Remaining blockers are recorded below rather than hidden by weakened
+workflows.
 
 ## Scorecard
 
-| Area                               | Score | Evidence                                                                                                                            | Main gap                                                                                          |
-| ---------------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Security boundary                  |  8/10 | Fail-closed taxonomy; strict request field surface; local-only endpoint enforcement; authenticated metrics; keyed receipts          | Deterministic detection remains incomplete; bearer auth and software-held keys are alpha controls |
-| Code and local verification        |  8/10 | Strict TypeScript; 14 tests pass; 12/12 synthetic eval decisions/findings; no known audited vulnerabilities; standalone compilation | Small, implementation-authored corpus; no load or independent adversarial test                    |
-| Documentation and claim discipline |  9/10 | CISO brief, threat model, architecture, compliance crosswalk, operations, release, support, research, and explicit non-claims       | External reviewer has not yet performed a clean-room install or claim audit                       |
-| Supply chain and release           |  7/10 | Pinned actions; test/audit gate; single-build image scan; CycloneDX SBOM; keyless signing and provenance workflow                   | Workflow has not run in the destination GitHub repository; container has not been executed here   |
-| Open-source governance             |  8/10 | Apache-2.0, contribution guide, governance, code of conduct, support, changelog, issue forms, private-reporting policy              | Repository settings, maintainer ownership, and response route are not live                        |
-| Name and legal                     |  6/10 | Egrysa selected; preliminary screen retained; founder reports external legal screening complete                                     | Legal work is not reproduced here; run a fresh namespace/collision check before publication       |
-| Enterprise production              |  4/10 | Hardened single-node baseline and explicit responsibility model                                                                     | No OIDC, HA evidence, durable receipts, KMS/HSM, SIEM, pen test, SLO, DR, or certification scope  |
+| Area                               | Score | Evidence                                                                                                                        | Main gap                                                                                          |
+| ---------------------------------- | ----: | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Security boundary                  |  8/10 | Fail-closed taxonomy; strict request field surface; local-only endpoint enforcement; authenticated metrics; keyed receipts      | Deterministic detection remains incomplete; bearer auth and software-held keys are alpha controls |
+| Code and local verification        |  8/10 | Strict TypeScript; 15 tests pass; 12/12 synthetic eval decisions/findings; Deno dependency audit passed; standalone compilation | Small, implementation-authored corpus; no load or independent adversarial test                    |
+| Documentation and claim discipline |  9/10 | CISO brief, threat model, architecture, compliance crosswalk, operations, release, support, research, and explicit non-claims   | External reviewer has not yet performed a clean-room install or claim audit                       |
+| Supply chain and release           |  8/10 | Pinned actions; private dry-run build; Debian-vendor high/critical gate passed; 11-component CycloneDX SBOM; advisory triage    | Registry signature, attestation, and provenance await the public tag                              |
+| Open-source governance             |  8/10 | Private GitHub repository, Apache-2.0, governance documents, issue forms, Dependabot alerts, and private-reporting policy       | Native CodeQL, dependency review, private reporting, and branch rules await public cutover        |
+| Name and legal                     |  7/10 | Egrysa selected; preliminary screen and exact namespace refresh retained; founder reports external legal screening complete     | Legal work is not reproduced here; crates.io check was inconclusive; recheck at cutover           |
+| Enterprise production              |  4/10 | Hardened single-node baseline and explicit responsibility model                                                                 | No OIDC, HA evidence, durable receipts, KMS/HSM, SIEM, pen test, SLO, DR, or certification scope  |
 
 **Overall:** 7.5/10 for a public alpha source release; 4/10 for production enterprise use.
 
@@ -27,18 +30,50 @@ The score is not a compliance or security rating and should not be quoted as an 
 
 ## Publication blockers
 
-1. Review the atomic Egrysa repository/package rename and create a signed commit with the supplied
-   maintainer identity without rewriting unrelated user history.
-2. Create the destination GitHub repository, require review/branch protection, enable private
-   vulnerability reporting, and test it from a non-maintainer account.
-3. Run CI and the release workflow in the destination repository; verify the immutable digest,
-   vulnerability result, SBOM, signature, and provenance.
-4. Build and run the container, then apply the manifests to a disposable Kubernetes environment and
-   capture the security context, readiness, network, and failure evidence.
-5. Complete one authorized live generation through a contracted remote API and one loopback local
-   provider; retain only content-minimized test results.
-6. Perform final secret/history, dependency/license, link, namespace, and clean-room installation
-   reviews.
+1. After explicit publication approval, enable free public branch protection, CodeQL, dependency
+   review, secret scanning, push protection, and private vulnerability reporting; then rerun CI.
+2. From protected `main`, verify the public tagged workflow's immutable registry digest,
+   vulnerability result, CycloneDX SBOM attestation, signature, and provenance before announcing a
+   release.
+
+## Completed runtime evidence
+
+- The hardened container ran as UID/GID 65532 with a read-only root filesystem, dropped
+  capabilities, no-new-privileges, and loopback-only host publication.
+- The local image had zero detected high or critical vulnerabilities at scan time, and a local
+  CycloneDX SBOM was generated. This is not registry digest, signature, or provenance evidence.
+- The manifests failed closed on the placeholder image digest and then rolled out in disposable
+  Kubernetes 1.36.1 with Calico 3.32.1. Labelled ingress and public HTTPS egress passed; unlabelled
+  ingress and private ClusterIP egress timed out.
+- A loopback Ollama `gpt-oss:20b` generation routed through Egrysa as `local_only` and emitted a
+  signed, content-minimized receipt.
+- One authorized OpenAI-compatible provider-adapter request used a non-sensitive prompt and returned
+  the expected marker from `gpt-5.2`. The smoke test validates credential, quota, model access,
+  request sanitization, and response parsing at test time; it does not prove provider retention or
+  deletion behavior or exercise the full policy-gateway path.
+- Commits `d7af06e` and `6119e27` were signed with the configured SSH signing key and reported as
+  verified by GitHub.
+- A clean temporary clone passed formatting, linting, type checks, 15 tests, 12/12 synthetic
+  evaluations, the vulnerability audit, Trivy source/configuration scanning, workflow validation,
+  standalone compilation, and loopback health/readiness checks without a local environment file.
+- The final documentation-link review returned HTTP 200 for all 17 external links, and the exact
+  namespace refresh found no obvious npm, PyPI, Docker Hub repository, or general software-search
+  collision. The crates.io check was inconclusive and no legal-clearance claim is made.
+- Private release dry run `29397265834` passed source verification, image build, the Debian-vendor
+  high/critical Trivy gate, and CycloneDX generation without publishing an image. The retained
+  artifact digest is `sha256:6f20f944340a6a5aa8764a1fddbec57a4b7299e5ff94d156529859886581c089`; the
+  extracted SBOM file digest is
+  `sha256:1cc84bb53b686f7e1c953322acc929dc2690c0b90bd2008467acbda282511a15`.
+- The dry-run SBOM contains 11 components and 14 advisories. The vendor-prioritized scan selected no
+  high or critical findings, while some alternative rating sources include high or critical scores.
+  Every advisory now has a recorded applicability and residual-risk disposition in the
+  [SBOM advisory triage](SBOM_TRIAGE.md). This is not a claim that the image has no known
+  vulnerabilities.
+- Private CI run [`29411056348`](https://github.com/sundeep229211/egrysa/actions/runs/29411056348)
+  passed at commit `4b1a3e704ebb0064669955771294283fcfe48cbd`, including the independent Trivy
+  filesystem vulnerability, secret, and misconfiguration baseline. Native CodeQL and dependency
+  review were intentionally deferred by repository visibility and remain mandatory at public
+  cutover.
 
 ## Not blockers for the public alpha
 

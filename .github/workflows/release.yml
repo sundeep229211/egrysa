@@ -2,19 +2,24 @@ name: Release image
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch: {}
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 permissions:
   contents: read
-  packages: write
-  id-token: write
-  attestations: write
 jobs:
   verify:
+    name: Verify release source
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v6
-        with: { fetch-depth: 0 }
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - name: Require the release commit on main
+        if: github.event_name == 'push'
         run: |
           git fetch origin main --no-tags
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
@@ -23,12 +28,61 @@ jobs:
       - run: deno task check
       - run: deno task eval
       - run: deno audit
-  image:
+  dry-run:
+    name: Dry-run release build, scan, and SBOM
+    if: github.event_name == 'workflow_dispatch'
     needs: verify
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v6
+        with: { persist-credentials: false }
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Set non-publishing candidate tag
+        run: echo "IMAGE=egrysa:release-dry-run-${GITHUB_SHA}" >> "$GITHUB_ENV"
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Containerfile
+          load: true
+          tags: ${{ env.IMAGE }}
+      - uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          scanners: vuln
+      - name: Generate dry-run CycloneDX SBOM
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: cyclonedx
+          output: sbom.cdx.json
+          scanners: vuln
+      - name: Retain dry-run SBOM as private workflow evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: egrysa-release-dry-run-${{ github.sha }}
+          path: sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 7
+  image:
+    name: Build, scan, publish, and attest image
+    if: github.event_name == 'push'
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # Publish the scanned image to GHCR.
+      id-token: write # Request Sigstore and GitHub provenance identities.
+      attestations: write # Publish GitHub build provenance for the image digest.
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v6
+        with: { persist-credentials: false }
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:

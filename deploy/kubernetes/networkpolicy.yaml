@@ -21,6 +21,8 @@ spec:
         - { protocol: UDP, port: 53 }
         - { protocol: TCP, port: 53 }
     - to:
+        # Service translation and ipBlock ordering vary by CNI. Validate private ClusterIP denial
+        # in the target cluster and retain an egress proxy or firewall as the authoritative control.
         - ipBlock:
             cidr: 0.0.0.0/0
             except:

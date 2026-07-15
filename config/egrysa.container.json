@@ -1,5 +1,5 @@
 {
-  "listen": { "hostname": "127.0.0.1", "port": 8787 },
+  "listen": { "hostname": "0.0.0.0", "port": 8787 },
   "maxRequestBytes": 1048576,
   "requestTimeoutMs": 60000,
   "receiptCapacity": 10000,

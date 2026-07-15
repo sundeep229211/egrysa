@@ -3,36 +3,66 @@ on:
   pull_request: {}
   push:
     branches: [main]
+  workflow_dispatch: {}
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   test:
+    name: Test and audit
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v6
+        with: { persist-credentials: false }
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with: { deno-version: "2.9.2" }
       - run: deno task check
       - run: deno audit
   dependency-review:
-    if: github.event_name == 'pull_request'
+    name: Dependency review
+    # GitHub exposes this action to public repositories without a paid Code Security license.
+    if: github.event.repository.private == false && github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v6
+        with: { persist-credentials: false }
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: moderate
-  codeql:
+  security-baseline:
+    name: Security baseline
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
-      security-events: write
-      packages: read
       contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v6
-      - uses: github/codeql-action/init@641a925cfafe92d0fdf8b239ba4053e3f8d99d6d # v3
+        with: { persist-credentials: false }
+      - uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+  codeql:
+    name: CodeQL
+    # CodeQL is free for public repositories; private execution requires GitHub Code Security.
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read # Let CodeQL inspect this workflow run while processing results.
+      security-events: write # Upload CodeQL analysis results.
+      packages: read # Let CodeQL resolve private GitHub package metadata if referenced.
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v6
+        with: { persist-credentials: false }
+      - uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
         with: { languages: javascript-typescript }
-      - uses: github/codeql-action/analyze@641a925cfafe92d0fdf8b239ba4053e3f8d99d6d # v3
+      - uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0

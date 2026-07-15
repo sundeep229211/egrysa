@@ -6,6 +6,7 @@ COPY --from=deno /deno /usr/local/bin/deno
 COPY --chown=65532:65532 deno.json ./deno.json
 COPY --chown=65532:65532 src ./src
 COPY --chown=65532:65532 config ./config
+ENV EGRYSA_CONFIG=/app/config/egrysa.container.json
 USER 65532:65532
 EXPOSE 8787
 ENTRYPOINT ["/usr/local/bin/deno"]

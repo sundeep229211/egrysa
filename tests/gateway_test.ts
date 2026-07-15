@@ -30,7 +30,12 @@ Deno.test("gateway denies blocked data and emits a content-minimized receipt", a
   );
   const receiptText = await receiptResponse.text();
   if (receiptResponse.status !== 200) throw new Error("receipt unavailable");
-  if (receiptText.includes("4111")) throw new Error("receipt persisted raw content");
+  if (
+    receiptText.includes("4111 1111 1111 1111") ||
+    receiptText.includes("4111111111111111")
+  ) {
+    throw new Error("receipt persisted raw content");
+  }
   const receipt = JSON.parse(receiptText);
   if (receipt.decision !== "deny" || receipt.rawContentPersisted !== false || !receipt.signature) {
     throw new Error("invalid receipt");

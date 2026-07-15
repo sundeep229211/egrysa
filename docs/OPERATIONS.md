@@ -16,6 +16,17 @@ Version 0.1 must run as one replica. Receipts and the chain head are held in pro
 lost on restart, and are not suitable as durable audit records. Do not add replicas until a
 consistency-aware receipt backend and retrieval tests exist.
 
+## Container boundary
+
+The image sets `EGRYSA_CONFIG=/app/config/egrysa.container.json`. That configuration matches the
+local example except that it listens on `0.0.0.0` inside the container. Do not expose that listener
+directly to an untrusted network. Publish the host port on loopback during evaluation, or place it
+behind the authenticated TLS/API-management boundary described above.
+
+Run the image with a non-root user, read-only root filesystem, dropped capabilities,
+no-new-privileges, and a small `noexec`/`nosuid` temporary filesystem. Keep secrets in the runtime
+secret mechanism rather than command arguments or image layers.
+
 ## Deployment sequence
 
 1. Fork and protect `main`; require review, CI, signed commits/tags according to company policy.
@@ -24,7 +35,9 @@ consistency-aware receipt backend and retrieval tests exist.
 4. Require tests and evaluation before build; scan the candidate image; then sign the published
    digest with Sigstore/cosign or the enterprise signing service.
 5. Create secrets through the secret operator. Never apply a plaintext secret manifest.
-6. Apply the ConfigMap, Deployment, Service, PDB, and NetworkPolicy.
+6. Apply the ConfigMap, Deployment, Service, PDB, and NetworkPolicy. Validate ingress and private
+   ClusterIP egress on the selected CNI: Service translation and standard `ipBlock` enforcement
+   ordering vary. Keep the egress proxy or firewall as the authoritative provider-host restriction.
 7. Put TLS, identity, rate limiting, and request quotas in the ingress/API-management layer.
 8. Run synthetic probes for deny, transform, local-only, receipt retrieval, upstream timeout, and
    provider rejection.

@@ -10,11 +10,11 @@ Deno.test({
       kind: "openai",
       baseUrl: "https://api.openai.com",
       apiKeyEnv: "OPENAI_API_KEY",
-      allowedModels: ["gpt-5.6-luna"],
+      allowedModels: ["gpt-5.2"],
       dataPolicy: { training: "disabled", retention: "standard", allowRaw: false },
     };
     const response = await invokeProvider(provider, {
-      model: "gpt-5.6-luna",
+      model: "gpt-5.2",
       messages: [{ role: "user", content: "Reply with exactly: egrysa" }],
     }, 30_000);
     const content =
