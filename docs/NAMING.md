@@ -16,6 +16,17 @@ reproduce counsel's work or make an independent trademark-clearance claim.
 historical screen below is retained as preliminary context only. Domain status, developer
 namespaces, and common-law use can change and must be checked again immediately before publication.
 
+## Publication namespace refresh
+
+On 2026-07-15, an exact-name operational refresh found the selected GitHub repository at
+`sundeep229211/egrysa`, no exact `egrysa` package response from npm or PyPI, no public repositories
+listed under the exact Docker Hub namespace, and no `.com` RDAP record. The crates.io API check was
+inconclusive because it rejected the automated request. A general exact-name software search did not
+surface an obvious conflicting project.
+
+These are transient namespace observations, not reservations, trademark clearance, or legal advice.
+No package, container namespace, or domain was purchased or claimed during the refresh.
+
 ## Supplied names
 
 | Name   | Decision | Reason                                                                                                          |

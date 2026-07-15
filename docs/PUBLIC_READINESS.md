@@ -4,12 +4,13 @@ Review date: 2026-07-15
 
 ## Recommendation
 
-**No-go for public release today.** The private repository and signed baseline commit exist, and the
-container, Kubernetes, and local-provider runtime gates now have local evidence. Egrysa is selected
-and the founder reports legal screening complete. The remaining public-alpha blockers are the
-reviewed signed commit for the runtime fix, clean private-repository CI and control evidence, a
-quota-backed remote generation, release-artifact verification, and the final clean-room audit—not
-missing enterprise features.
+**No-go for public release today.** The private repository, signed runtime-readiness commits,
+container, Kubernetes, and local-provider runtime gates have evidence. Egrysa is selected and the
+founder reports legal screening complete. The no-payment path keeps GitHub-native CodeQL and
+dependency review disabled only while the repository is private, adds an independent private
+security baseline and non-publishing release dry run, and activates the native gates at the
+controlled public cutover. Remaining blockers are recorded below rather than hidden by weakened
+workflows.
 
 ## Scorecard
 
@@ -19,8 +20,8 @@ missing enterprise features.
 | Code and local verification        |  8/10 | Strict TypeScript; 15 tests pass; 12/12 synthetic eval decisions/findings; no known audited vulnerabilities; standalone compilation | Small, implementation-authored corpus; no load or independent adversarial test                    |
 | Documentation and claim discipline |  9/10 | CISO brief, threat model, architecture, compliance crosswalk, operations, release, support, research, and explicit non-claims       | External reviewer has not yet performed a clean-room install or claim audit                       |
 | Supply chain and release           |  8/10 | Pinned actions; local image build/run; zero high/critical scan result; local CycloneDX SBOM; signing and provenance workflow        | No registry digest, release signature, registry SBOM attestation, or provenance has been verified |
-| Open-source governance             |  8/10 | Private GitHub repository, Apache-2.0, governance documents, issue forms, Dependabot alerts, and private-reporting policy           | CodeQL integration failed; private vulnerability reporting and branch rules are unavailable today |
-| Name and legal                     |  6/10 | Egrysa selected; preliminary screen retained; founder reports external legal screening complete                                     | Legal work is not reproduced here; run a fresh namespace/collision check before publication       |
+| Open-source governance             |  8/10 | Private GitHub repository, Apache-2.0, governance documents, issue forms, Dependabot alerts, and private-reporting policy           | Native CodeQL, dependency review, private reporting, and branch rules await public cutover        |
+| Name and legal                     |  7/10 | Egrysa selected; preliminary screen and exact namespace refresh retained; founder reports external legal screening complete         | Legal work is not reproduced here; crates.io check was inconclusive; recheck at cutover           |
 | Enterprise production              |  4/10 | Hardened single-node baseline and explicit responsibility model                                                                     | No OIDC, HA evidence, durable receipts, KMS/HSM, SIEM, pen test, SLO, DR, or certification scope  |
 
 **Overall:** 7.5/10 for a public alpha source release; 4/10 for production enterprise use.
@@ -29,17 +30,15 @@ The score is not a compliance or security rating and should not be quoted as an 
 
 ## Publication blockers
 
-1. Review the container-listener fix and evidence updates, then create a signed commit with the
-   supplied repository-local maintainer identity.
-2. Push the review branch and obtain clean CI. Resolve the CodeQL integration permission failure;
-   configure private vulnerability reporting and branch rules when the repository plan exposes them,
-   or record those unavailable controls as publication blockers.
-3. Exercise the release workflow without making a public release; verify the immutable registry
-   digest, vulnerability result, CycloneDX SBOM, signature, and provenance.
-4. Complete one authorized remote-provider generation when working quota is available. The key was
+1. Obtain clean private CI from the independent security baseline and exercise the non-publishing
+   release dry run. Native CodeQL and dependency review remain mandatory at public cutover.
+2. Complete one authorized remote-provider generation when working quota is available. The key was
    accepted, but the provider returned `insufficient_quota`; no billing change is authorized.
-5. Perform final secret/history, dependency/license, link, namespace, and clean-room installation
-   reviews.
+3. After explicit publication approval, enable free public branch protection, CodeQL, dependency
+   review, secret scanning, push protection, and private vulnerability reporting; then rerun CI.
+4. From protected `main`, verify the public tagged workflow's immutable registry digest,
+   vulnerability result, CycloneDX SBOM attestation, signature, and provenance before announcing a
+   release.
 
 ## Completed runtime evidence
 
@@ -52,6 +51,14 @@ The score is not a compliance or security rating and should not be quoted as an 
   ingress and private ClusterIP egress timed out.
 - A loopback Ollama `gpt-oss:20b` generation routed through Egrysa as `local_only` and emitted a
   signed, content-minimized receipt. No remote-generation success is claimed.
+- Commits `d7af06e` and `6119e27` were signed with the configured SSH signing key and reported as
+  verified by GitHub.
+- A clean temporary clone passed formatting, linting, type checks, 15 tests, 12/12 synthetic
+  evaluations, the vulnerability audit, Trivy source/configuration scanning, workflow validation,
+  standalone compilation, and loopback health/readiness checks without a local environment file.
+- The final documentation-link review returned HTTP 200 for all 17 external links, and the exact
+  namespace refresh found no obvious npm, PyPI, Docker Hub repository, or general software-search
+  collision. The crates.io check was inconclusive and no legal-clearance claim is made.
 
 ## Not blockers for the public alpha
 
