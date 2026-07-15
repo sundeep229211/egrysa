@@ -36,6 +36,7 @@ jobs:
     name: CodeQL
     runs-on: ubuntu-24.04
     permissions:
+      actions: read # Let CodeQL inspect this workflow run while processing results.
       security-events: write # Upload CodeQL analysis results.
       packages: read # Let CodeQL resolve private GitHub package metadata if referenced.
       contents: read
