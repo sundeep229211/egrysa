@@ -1,6 +1,21 @@
 import { validateConfig } from "../src/config.ts";
 import type { AppConfig } from "../src/types.ts";
+import containerConfig from "../config/egrysa.container.json" with { type: "json" };
+import exampleConfig from "../config/egrysa.example.json" with { type: "json" };
 import { testConfig } from "./fixtures.ts";
+
+Deno.test("shipped container configuration validates and listens on all interfaces", () => {
+  const config = structuredClone(containerConfig) as AppConfig;
+  validateConfig(config);
+  if (config.listen.hostname !== "0.0.0.0") {
+    throw new Error("container configuration must listen on all interfaces");
+  }
+  const normalized = structuredClone(config);
+  normalized.listen = structuredClone(exampleConfig.listen);
+  if (JSON.stringify(normalized) !== JSON.stringify(exampleConfig)) {
+    throw new Error("container configuration may differ from the example only by listen address");
+  }
+});
 
 Deno.test("configuration requires exactly one policy action per data class", () => {
   const missing = testConfig();

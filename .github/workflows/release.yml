@@ -2,18 +2,21 @@ name: Release image
 on:
   push:
     tags: ["v*"]
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 permissions:
   contents: read
-  packages: write
-  id-token: write
-  attestations: write
 jobs:
   verify:
+    name: Verify release source
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v6
-        with: { fetch-depth: 0 }
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - name: Require the release commit on main
         run: |
           git fetch origin main --no-tags
@@ -24,11 +27,18 @@ jobs:
       - run: deno task eval
       - run: deno audit
   image:
+    name: Build, scan, publish, and attest image
     needs: verify
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # Publish the scanned image to GHCR.
+      id-token: write # Request Sigstore and GitHub provenance identities.
+      attestations: write # Publish GitHub build provenance for the image digest.
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v6
+        with: { persist-credentials: false }
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:

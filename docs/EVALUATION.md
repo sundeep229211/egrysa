@@ -10,7 +10,7 @@ Suite: `egrysa-synthetic-v1`
 
 | Gate                                         |                                                Result |
 | -------------------------------------------- | ----------------------------------------------------: |
-| Unit/integration tests                       |                                   14 passed, 0 failed |
+| Unit/integration tests                       |                                   15 passed, 0 failed |
 | Expected data-class decisions                |                                                 12/12 |
 | Exact expected finding sets                  |                                                 12/12 |
 | High-severity secret egress                  |                                                     0 |
@@ -18,8 +18,38 @@ Suite: `egrysa-synthetic-v1`
 | Raw prompt persistence by evaluation harness |                                                 false |
 | End-to-end surrogate/recomposition path      |                    passed against local HTTP upstream |
 | Standalone arm64 binary                      |                                 compiled successfully |
+| Hardened container runtime                   |                    passed with restricted host launch |
+| Local image high/critical vulnerability scan |                                   0 detected by Trivy |
+| Local CycloneDX SBOM                         |                          generated with 11 components |
+| Kubernetes manifest and policy runtime       |        passed on Kubernetes 1.36.1 with Calico 3.32.1 |
+| Ollama local generation through Egrysa       |  passed with `local_only` decision and signed receipt |
 | OpenAI credential/authentication             |                        `/v1/models` returned HTTP 200 |
 | OpenAI generation                            | not validated; provider returned `insufficient_quota` |
+
+## Runtime evidence
+
+The container listened through its container-specific configuration and was published only on the
+host loopback interface. It ran as UID/GID 65532 with a read-only root filesystem, a `noexec` and
+`nosuid` temporary filesystem, no Linux capabilities, and no-new-privileges. Health, readiness,
+authenticated metrics, deny behavior, and content-minimized receipt retrieval passed. The local
+image scan reported zero high or critical findings at that time; this result is not a claim about a
+future registry image.
+
+The Kubernetes manifests first failed closed on the all-zero image digest placeholder. After the
+local image was loaded into a disposable cluster, the pod became ready without restarts and retained
+the declared non-root, seccomp, read-only-root, no-service-account-token, and dropped-capability
+settings. With Calico 3.32.1, labelled client ingress and public HTTPS egress succeeded, while
+unlabelled client ingress and private ClusterIP egress timed out.
+
+The same ClusterIP private-egress probe was reachable under kindnet. Kubernetes Service translation
+and `ipBlock` enforcement ordering are CNI-dependent, so the manifest alone does not prove portable
+private-range denial. Operators must validate the chosen CNI and retain an egress proxy or firewall
+as the authoritative provider-host restriction.
+
+A local Ollama `gpt-oss:20b` request containing a synthetic confidential term routed through Egrysa
+with decision `local_only`, provider `local`, and a signed receipt. The receipt recorded one
+`confidential_term`, `rawContentPersisted=false`, and `providerStoreRequested=false`. Only minimized
+metadata was retained for this evaluation.
 
 ## Interpretation
 
