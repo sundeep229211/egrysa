@@ -26,7 +26,7 @@ restricts models and endpoints, and records what policy was applied without reco
 | Confidential routing         | Configured terms force a local provider                                                   | Taxonomy must be maintained; conceptual references may evade exact terms |
 | Provider restriction         | HTTPS, model allowlists, fixed base URLs, no redirects                                    | DNS, CA, provider account, and contract remain external dependencies     |
 | Provider non-storage request | `store:false` forced for OpenAI-compatible calls                                          | This is not proof of deletion or ZDR entitlement                         |
-| Audit evidence               | HMAC-signed receipts; keyed, nonce-bound request fingerprint; no raw content              | Single-process store is ephemeral and uses a software-held key           |
+| Audit evidence               | Durable Ed25519 receipts; workload ID; keyed fingerprint; signed chain checkpoint         | Single-writer log; external anchoring remains operator-owned             |
 | Runtime confinement          | Deno scoped permissions; Kubernetes non-root/read-only/seccomp/network policy             | Cluster and host controls remain customer responsibilities               |
 | Supply chain                 | Zero third-party runtime packages, pinned CI actions, SBOM and provenance workflows       | Base images and build platform still require verification                |
 

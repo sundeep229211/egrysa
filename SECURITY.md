@@ -3,9 +3,9 @@
 ## Reporting
 
 Do not open a public issue for a suspected vulnerability. Use **Security → Report a vulnerability**
-in the GitHub repository to create a private security advisory. Public release is blocked until the
-repository owner has enabled GitHub private vulnerability reporting and verified the workflow from a
-non-maintainer account.
+in the GitHub repository to create a private security advisory. GitHub private vulnerability
+reporting is enabled. The first tagged release remains blocked until the reporting workflow is
+verified from a non-maintainer account.
 
 Include only synthetic reproduction data. Do not include customer data, provider keys, client keys,
 prompts, responses, or surrogate maps. If private reporting is unavailable, do not send sensitive

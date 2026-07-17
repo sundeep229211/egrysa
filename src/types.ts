@@ -20,6 +20,9 @@ export interface Finding {
   end: number;
   value: string;
   label?: string;
+  detectorId?: string;
+  confidence?: number;
+  precision?: "high" | "candidate";
 }
 
 export interface DataPolicy {
@@ -43,6 +46,8 @@ export interface AppConfig {
   maxRequestBytes: number;
   requestTimeoutMs: number;
   receiptCapacity: number;
+  receiptLogPath: string;
+  receiptChainId: string;
   providers: ProviderConfig[];
   policy: {
     defaultProvider: string;
@@ -55,8 +60,30 @@ export interface AppConfig {
 }
 
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null;
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: ToolCall[];
+}
+
+export interface ToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+export interface ChatTool {
+  type: "function";
+  function: {
+    name: string;
+    description?: string;
+    parameters?: JsonObject;
+    strict?: boolean;
+  };
 }
 
 export interface ChatRequest {
@@ -69,12 +96,22 @@ export interface ChatRequest {
   frequency_penalty?: number;
   presence_penalty?: number;
   seed?: number;
+  tools?: ChatTool[];
+  tool_choice?: "none" | "auto" | "required" | {
+    type: "function";
+    function: { name: string };
+  };
+  parallel_tool_calls?: boolean;
+  stream_options?: { include_usage?: boolean };
 }
 
 export interface PrivacyReceipt {
-  version: "1";
+  version: "2";
   id: string;
+  chainId: string;
+  sequence: number;
   timestamp: string;
+  workloadId: string;
   requestFingerprint: string;
   decision: Decision;
   provider: string | null;
@@ -85,5 +122,21 @@ export interface PrivacyReceipt {
   providerStoreRequested: false;
   previousReceiptHash: string | null;
   receiptHash: string;
+  signingKeyId: string;
   signature: string;
+}
+
+export interface ReceiptCheckpoint {
+  version: "1";
+  chainId: string;
+  sequence: number;
+  receiptHash: string | null;
+  timestamp: string;
+  signingKeyId: string;
+  signature: string;
+}
+
+export type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
+export interface JsonObject {
+  [key: string]: JsonValue;
 }

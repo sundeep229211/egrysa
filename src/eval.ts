@@ -1,7 +1,8 @@
 import { classify } from "./classifier.ts";
 import { loadConfig } from "./config.ts";
 import { decide } from "./policy.ts";
-import type { Decision, FindingKind } from "./types.ts";
+import { recompose, transform } from "./surrogate.ts";
+import { type Decision, FINDING_KINDS, type FindingKind } from "./types.ts";
 
 interface EvalCase {
   id: string;
@@ -15,37 +16,78 @@ const config = await loadConfig("config/egrysa.example.json");
 const rows = (await Deno.readTextFile("evals/cases.jsonl")).trim().split("\n").map((line) =>
   JSON.parse(line) as EvalCase
 );
-let correctKinds = 0;
+const counts = Object.fromEntries(
+  FINDING_KINDS.map((kind) => [kind, { tp: 0, fp: 0, fn: 0 }]),
+) as Record<FindingKind, { tp: number; fp: number; fn: number }>;
+let exactKindCases = 0;
 let correctDecisions = 0;
 let highSeverityLeaks = 0;
+let falsePositiveCases = 0;
+let transformCases = 0;
+let successfulRoundTrips = 0;
+let transformLeakage = 0;
 const started = performance.now();
 
 for (const row of rows) {
-  const findings = classify(row.prompt, config);
-  const kinds = new Set(findings.map((finding) => finding.kind));
-  const kindsMatch = row.expectedKinds.every((kind) => kinds.has(kind)) &&
-    kinds.size === new Set(row.expectedKinds).size;
-  const decision = decide(findings, null, config).decision;
-  if (kindsMatch) correctKinds++;
-  if (decision === row.expectedDecision) correctDecisions++;
+  const findings = await classify(row.prompt, config);
+  const actual = new Set(findings.map((finding) => finding.kind));
+  const expected = new Set(row.expectedKinds);
+  for (const kind of FINDING_KINDS) {
+    if (actual.has(kind) && expected.has(kind)) counts[kind].tp++;
+    else if (actual.has(kind)) counts[kind].fp++;
+    else if (expected.has(kind)) counts[kind].fn++;
+  }
+  const exact = actual.size === expected.size && [...actual].every((kind) => expected.has(kind));
+  if (exact) exactKindCases++;
+  if (!expected.size && actual.size) falsePositiveCases++;
+  const policy = decide(findings, null, config);
+  if (policy.decision === row.expectedDecision) correctDecisions++;
   if (
     ["credit_card", "private_key", "api_secret", "ssn"].some((kind) =>
       row.expectedKinds.includes(kind as FindingKind)
-    ) && decision !== "deny"
+    ) && policy.decision !== "deny"
   ) highSeverityLeaks++;
+  if (policy.decision === "transform") {
+    transformCases++;
+    const result = transform(row.prompt, findings, new Set(config.policy.transformKinds));
+    if ([...result.mapping.values()].some((raw) => result.text.includes(raw))) transformLeakage++;
+    if (recompose(result.text, result.mapping) === row.prompt) successfulRoundTrips++;
+  }
 }
 
 const elapsed = performance.now() - started;
+const perKind = Object.fromEntries(
+  Object.entries(counts).map(([kind, value]) => {
+    const precision = ratio(value.tp, value.tp + value.fp);
+    const recall = ratio(value.tp, value.tp + value.fn);
+    return [kind, { ...value, precision, recall }];
+  }),
+);
+const measured = Object.values(perKind).filter((value) => value.tp + value.fp + value.fn > 0);
+const macroPrecision = measured.reduce((sum, value) => sum + value.precision, 0) / measured.length;
+const macroRecall = measured.reduce((sum, value) => sum + value.recall, 0) / measured.length;
 const report = {
-  suite: "egrysa-synthetic-v1",
+  suite: "egrysa-synthetic-v2",
   cases: rows.length,
-  exactKindAccuracy: correctKinds / rows.length,
+  exactKindCaseAccuracy: exactKindCases / rows.length,
   decisionAccuracy: correctDecisions / rows.length,
+  macroPrecision,
+  macroRecall,
+  perKind,
+  falsePositiveCases,
   highSeverityLeaks,
+  transformLeakage,
+  transformationRoundTripAccuracy: ratio(successfulRoundTrips, transformCases),
   meanClassifierPolicyMs: elapsed / rows.length,
   rawPromptsPersisted: false,
 };
 console.log(JSON.stringify(report, null, 2));
-if (report.exactKindAccuracy < 0.95 || report.decisionAccuracy < 0.95 || highSeverityLeaks > 0) {
-  Deno.exit(1);
+if (
+  report.macroPrecision < 0.95 || report.macroRecall < 0.95 ||
+  report.decisionAccuracy < 0.95 || highSeverityLeaks > 0 || transformLeakage > 0 ||
+  report.transformationRoundTripAccuracy < 1
+) Deno.exit(1);
+
+function ratio(numerator: number, denominator: number): number {
+  return denominator === 0 ? 1 : numerator / denominator;
 }

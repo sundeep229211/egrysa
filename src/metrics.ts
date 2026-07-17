@@ -3,6 +3,7 @@ export class Metrics {
   denied = 0;
   transformed = 0;
   providerErrors = 0;
+  recompositionFailures = 0;
   inFlight = 0;
 
   render(): string {
@@ -19,6 +20,9 @@ export class Metrics {
       "# HELP egrysa_provider_errors_total Upstream provider failures.",
       "# TYPE egrysa_provider_errors_total counter",
       `egrysa_provider_errors_total ${this.providerErrors}`,
+      "# HELP egrysa_recomposition_failures_total Provider responses containing damaged surrogate tokens.",
+      "# TYPE egrysa_recomposition_failures_total counter",
+      `egrysa_recomposition_failures_total ${this.recompositionFailures}`,
       "# HELP egrysa_in_flight Current API requests.",
       "# TYPE egrysa_in_flight gauge",
       `egrysa_in_flight ${this.inFlight}`,

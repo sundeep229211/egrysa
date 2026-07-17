@@ -28,6 +28,12 @@ export function validateConfig(config: AppConfig): void {
     !Number.isInteger(config.receiptCapacity) || config.receiptCapacity < 1 ||
     config.receiptCapacity > 1_000_000
   ) throw new Error("receiptCapacity must be between 1 and 1000000");
+  if (typeof config.receiptLogPath !== "string" || !config.receiptLogPath.trim()) {
+    throw new Error("receiptLogPath must be a non-empty path");
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(config.receiptChainId)) {
+    throw new Error("receiptChainId must be a stable identifier");
+  }
   if (!config.providers?.length) throw new Error("at least one provider is required");
   const ids = new Set<string>();
   for (const provider of config.providers) {

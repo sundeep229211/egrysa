@@ -13,6 +13,7 @@ paid enterprise layer is built.
 - Stabilize configuration schema and policy receipts.
 - Add provider contract profiles without claiming remote attestation.
 - Complete external security review and public vulnerability-reporting setup.
+- Validate OpenAI-compatible streaming and bounded function tools against design-partner SDKs.
 
 ## 0.2: measurable semantic exposure
 
@@ -24,9 +25,9 @@ paid enterprise layer is built.
 - Pluggable local named-entity and secret detectors with explicit confidence policy.
 - Policy simulation and explainable dry-run mode.
 
-## 0.3: durable evidence and enterprise integration
+## 0.3: enterprise evidence integration
 
-- Append-only external receipt backend with multi-replica consistency.
+- Multi-replica receipt sequencing and external transparency/SIEM checkpoint sinks.
 - OIDC/workload identity, tenant isolation, KMS/HSM signing, SIEM export, and policy bundles.
 - Regional/provider capability registry and independently verifiable deployment profiles.
 

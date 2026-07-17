@@ -18,13 +18,15 @@ governed by product behavior and contract.
 
 ## Current state
 
-Built: text-only OpenAI-compatible gateway, deterministic classification, policy engine,
-local/remote routing, OpenAI and Anthropic adapters, local recomposition, content-minimized
-receipts, tests, synthetic evals, CI, and hardened deployment examples.
+Built: OpenAI-compatible text ingress, SSE streaming for OpenAI-compatible providers, bounded
+function-tool messages, model discovery, versioned local detector contract, deterministic
+classification, policy routing, local recomposition, durable Ed25519-signed attributed receipts,
+tests, synthetic evals, CI, and hardened deployment examples.
 
-Not built: probabilistic NER, identity federation, tenant administration, persistent evidence
-export, HSM signing, multimodal inspection, tools, streaming, cross-provider decomposition,
-provider-control verification, hardware appliance, or third-party certification.
+Not built: probabilistic NER, identity federation, tenant administration, multi-replica receipt
+sequencing, HSM signing, multimodal inspection, autonomous tool execution, Anthropic streaming,
+cross-provider decomposition, provider-control verification, hardware appliance, or third-party
+certification.
 
 ## Non-negotiable rules
 

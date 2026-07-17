@@ -1,12 +1,9 @@
 import { Gateway } from "../src/gateway.ts";
+import { configureTestEnvironment } from "./environment.ts";
 import { testConfig } from "./fixtures.ts";
 
 Deno.test("gateway denies blocked data and emits a content-minimized receipt", async () => {
-  Deno.env.set("EGRYSA_INBOUND_KEYS", "a-test-client-key-that-is-long-enough");
-  Deno.env.set(
-    "EGRYSA_RECEIPT_HMAC_KEY",
-    "a-test-receipt-key-that-is-at-least-32-characters",
-  );
+  await configureTestEnvironment();
   const gateway = await Gateway.create(testConfig());
   const response = await gateway.handle(
     new Request("http://gateway/v1/chat/completions", {
@@ -37,23 +34,23 @@ Deno.test("gateway denies blocked data and emits a content-minimized receipt", a
     throw new Error("receipt persisted raw content");
   }
   const receipt = JSON.parse(receiptText);
-  if (receipt.decision !== "deny" || receipt.rawContentPersisted !== false || !receipt.signature) {
+  if (
+    receipt.decision !== "deny" || receipt.rawContentPersisted !== false || !receipt.signature ||
+    receipt.workloadId !== "test-workload"
+  ) {
     throw new Error("invalid receipt");
   }
 });
 
 Deno.test("gateway rejects uninspected request fields at the boundary", async () => {
-  Deno.env.set("EGRYSA_INBOUND_KEYS", "a-test-client-key-that-is-long-enough");
-  Deno.env.set(
-    "EGRYSA_RECEIPT_HMAC_KEY",
-    "a-test-receipt-key-that-is-at-least-32-characters",
-  );
+  await configureTestEnvironment();
   const gateway = await Gateway.create(testConfig());
   const sensitiveFieldName = "sk-proj-sensitive-field-name-123456789";
   for (
     const extra of [
-      { stream: true },
       { tools: [{ type: "function" }] },
+      { stream: "yes" },
+      { stream_options: { include_usage: true } },
       { user: "employee@example.com" },
       { response_format: { type: "json_schema", description: "Project Juniper" } },
       { temperature: { secret: "employee@example.com" } },
@@ -105,11 +102,7 @@ Deno.test("gateway rejects uninspected request fields at the boundary", async ()
 });
 
 Deno.test("gateway keeps readiness minimal and protects metrics", async () => {
-  Deno.env.set("EGRYSA_INBOUND_KEYS", "a-test-client-key-that-is-long-enough");
-  Deno.env.set(
-    "EGRYSA_RECEIPT_HMAC_KEY",
-    "a-test-receipt-key-that-is-at-least-32-characters",
-  );
+  await configureTestEnvironment();
   const gateway = await Gateway.create(testConfig());
   const ready = await gateway.handle(new Request("http://gateway/readyz"));
   const readyText = await ready.text();
@@ -121,11 +114,7 @@ Deno.test("gateway keeps readiness minimal and protects metrics", async () => {
 });
 
 Deno.test("gateway transforms before egress and recomposes after inference", async () => {
-  Deno.env.set("EGRYSA_INBOUND_KEYS", "a-test-client-key-that-is-long-enough");
-  Deno.env.set(
-    "EGRYSA_RECEIPT_HMAC_KEY",
-    "a-test-receipt-key-that-is-at-least-32-characters",
-  );
+  await configureTestEnvironment();
   const capture: { body: Record<string, unknown> | null } = { body: null };
   let resolveAddress!: (port: number) => void;
   const portPromise = new Promise<number>((resolve) => resolveAddress = resolve);
@@ -158,7 +147,10 @@ Deno.test("gateway transforms before egress and recomposes after inference", asy
         },
         body: JSON.stringify({
           model: "approved-model",
-          messages: [{ role: "user", content: "Email a@example.com" }],
+          messages: [
+            { role: "user", content: "Email a@example.com" },
+            { role: "user", content: "Confirm with a@example.com" },
+          ],
         }),
       }),
     );
@@ -170,6 +162,10 @@ Deno.test("gateway transforms before egress and recomposes after inference", asy
     if (!upstreamText.includes("__EGRYSA_EMAIL_")) {
       throw new Error("surrogate did not reach provider");
     }
+    const tokens = upstreamText.match(/__EGRYSA_EMAIL_[A-Za-z0-9_]+__/g) ?? [];
+    if (tokens.length !== 2 || new Set(tokens).size !== 1) {
+      throw new Error("the same value did not reuse one request-scoped surrogate");
+    }
     if (upstreamBody?.store !== false || upstreamBody?.stream !== false) {
       throw new Error("provider storage or streaming was not disabled");
     }
@@ -177,6 +173,167 @@ Deno.test("gateway transforms before egress and recomposes after inference", asy
     if (!downstream.includes("a@example.com") || downstream.includes("__EGRYSA_EMAIL_")) {
       throw new Error("local recomposition failed");
     }
+  } finally {
+    await server.shutdown();
+  }
+});
+
+Deno.test("gateway lists the configured model union for SDK discovery", async () => {
+  await configureTestEnvironment();
+  const gateway = await Gateway.create(testConfig());
+  const response = await gateway.handle(
+    new Request("http://gateway/v1/models", {
+      headers: { authorization: "Bearer a-test-client-key-that-is-long-enough" },
+    }),
+  );
+  const body = await response.json();
+  if (
+    response.status !== 200 || body.object !== "list" || body.data.length !== 1 ||
+    body.data[0].id !== "approved-model"
+  ) throw new Error("model discovery response is not OpenAI-compatible");
+});
+
+Deno.test("gateway inspects tool surfaces and recomposes returned tool arguments", async () => {
+  await configureTestEnvironment();
+  const capture: { body: Record<string, unknown> | null } = { body: null };
+  let resolveAddress!: (port: number) => void;
+  const portPromise = new Promise<number>((resolve) => resolveAddress = resolve);
+  const server = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: ({ port }) => resolveAddress(port),
+  }, async (request) => {
+    const parsed = await request.json() as Record<string, unknown>;
+    capture.body = parsed;
+    const content = (parsed.messages as Array<Record<string, string>>)[0]?.content ?? "";
+    const token = content.match(/__EGRYSA_EMAIL_[A-Za-z0-9_]+__/)?.[0] ?? "";
+    return Response.json({
+      id: "mock-tool",
+      object: "chat.completion",
+      choices: [{
+        index: 0,
+        message: {
+          role: "assistant",
+          content: null,
+          tool_calls: [{
+            id: "call_1",
+            type: "function",
+            function: { name: "send_email", arguments: JSON.stringify({ email: token }) },
+          }],
+        },
+        finish_reason: "tool_calls",
+      }],
+    });
+  });
+  const port = await portPromise;
+  try {
+    const config = testConfig();
+    config.providers[1]!.baseUrl = `http://127.0.0.1:${port}/v1`;
+    const gateway = await Gateway.create(config);
+    const response = await gateway.handle(
+      new Request("http://gateway/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer a-test-client-key-that-is-long-enough",
+          "content-type": "application/json",
+          "x-egrysa-provider": "local",
+        },
+        body: JSON.stringify({
+          model: "approved-model",
+          messages: [{ role: "user", content: "Email alex@example.com" }],
+          tools: [{
+            type: "function",
+            function: {
+              name: "send_email",
+              description: "Send a message",
+              parameters: {
+                type: "object",
+                properties: { email: { type: "string" } },
+                required: ["email"],
+              },
+            },
+          }],
+          tool_choice: "auto",
+        }),
+      }),
+    );
+    const upstream = JSON.stringify(capture.body);
+    const downstream = await response.text();
+    if (response.status !== 200 || upstream.includes("alex@example.com")) {
+      throw new Error("tool request bypassed transformation");
+    }
+    if (!downstream.includes("alex@example.com") || downstream.includes("__EGRYSA_")) {
+      throw new Error("tool arguments were not locally recomposed");
+    }
+  } finally {
+    await server.shutdown();
+  }
+});
+
+Deno.test("gateway safely recomposes surrogate tokens split across SSE chunks", async () => {
+  await configureTestEnvironment();
+  let resolveAddress!: (port: number) => void;
+  const portPromise = new Promise<number>((resolve) => resolveAddress = resolve);
+  const encoder = new TextEncoder();
+  const server = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: ({ port }) => resolveAddress(port),
+  }, async (request) => {
+    const parsed = await request.json() as Record<string, unknown>;
+    const content = (parsed.messages as Array<Record<string, string>>)[0]?.content ?? "";
+    const token = content.match(/__EGRYSA_EMAIL_[A-Za-z0-9_]+__/)?.[0] ?? "";
+    const midpoint = Math.floor(token.length / 2);
+    const chunks = [token.slice(0, midpoint), token.slice(midpoint)];
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          for (const [index, value] of chunks.entries()) {
+            controller.enqueue(encoder.encode(`data: ${
+              JSON.stringify({
+                id: "stream-1",
+                object: "chat.completion.chunk",
+                model: "approved-model",
+                choices: [{
+                  index: 0,
+                  delta: { content: value },
+                  finish_reason: index === chunks.length - 1 ? "stop" : null,
+                }],
+              })
+            }\n\n`));
+          }
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        },
+      }),
+      { headers: { "content-type": "text/event-stream" } },
+    );
+  });
+  const port = await portPromise;
+  try {
+    const config = testConfig();
+    config.providers[1]!.baseUrl = `http://127.0.0.1:${port}/v1`;
+    const gateway = await Gateway.create(config);
+    const response = await gateway.handle(
+      new Request("http://gateway/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer a-test-client-key-that-is-long-enough",
+          "content-type": "application/json",
+          "x-egrysa-provider": "local",
+        },
+        body: JSON.stringify({
+          model: "approved-model",
+          messages: [{ role: "user", content: "Email alex@example.com" }],
+          stream: true,
+        }),
+      }),
+    );
+    const stream = await response.text();
+    if (
+      response.status !== 200 || !stream.includes("alex@example.com") ||
+      stream.includes("__EGRYSA_") || !stream.includes("[DONE]")
+    ) throw new Error(`streaming recomposition failed: ${stream}`);
   } finally {
     await server.shutdown();
   }

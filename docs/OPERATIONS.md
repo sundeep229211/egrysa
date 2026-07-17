@@ -10,11 +10,12 @@
 - Egress proxy or firewall restricted to approved provider hosts and regions.
 - Encrypted nodes, swap and core dumps disabled, restricted debug access, and runtime detection.
 - Local inference capacity if any taxonomy class is `local_only`.
-- External receipt sink and HSM/KMS signing before receipts are used as audit evidence.
+- Externally retained signed checkpoints and HSM/KMS signing before receipts are treated as
+  independently anchored audit evidence.
 
-Version 0.1 must run as one replica. Receipts and the chain head are held in process memory, are
-lost on restart, and are not suitable as durable audit records. Do not add replicas until a
-consistency-aware receipt backend and retrieval tests exist.
+The JSONL receipt chain survives process restarts on durable storage, but it remains single-writer.
+Run one replica until a consistency-aware sequencing backend exists. A holder of the software
+signing key can rewrite unanchored history, so retain signed checkpoints outside the gateway.
 
 ## Container boundary
 
@@ -27,6 +28,15 @@ Run the image with a non-root user, read-only root filesystem, dropped capabilit
 no-new-privileges, and a small `noexec`/`nosuid` temporary filesystem. Keep secrets in the runtime
 secret mechanism rather than command arguments or image layers.
 
+The receipt path must be writable by UID/GID 65532. Kubernetes supplies this through `fsGroup` and
+the PVC. For standalone containers, pre-create a bind directory owned by 65532, or initialize a
+named volume once with a reviewed helper image before starting Egrysa. A fresh root-owned named
+volume will fail closed on the first receipt append.
+
+When an environment file generated for host development is reused with a container, pin
+`EGRYSA_CONFIG=/app/config/egrysa.container.json` after `--env-file`; otherwise the host-relative
+receipt path overrides the image default.
+
 ## Deployment sequence
 
 1. Fork and protect `main`; require review, CI, signed commits/tags according to company policy.
@@ -35,9 +45,10 @@ secret mechanism rather than command arguments or image layers.
 4. Require tests and evaluation before build; scan the candidate image; then sign the published
    digest with Sigstore/cosign or the enterprise signing service.
 5. Create secrets through the secret operator. Never apply a plaintext secret manifest.
-6. Apply the ConfigMap, Deployment, Service, PDB, and NetworkPolicy. Validate ingress and private
-   ClusterIP egress on the selected CNI: Service translation and standard `ipBlock` enforcement
-   ordering vary. Keep the egress proxy or firewall as the authoritative provider-host restriction.
+6. Apply the PVC, ConfigMap, Deployment, Service, PDB, and NetworkPolicy. Validate ingress and
+   private ClusterIP egress on the selected CNI: Service translation and standard `ipBlock`
+   enforcement ordering vary. Keep the egress proxy or firewall as the authoritative provider-host
+   restriction.
 7. Put TLS, identity, rate limiting, and request quotas in the ingress/API-management layer.
 8. Run synthetic probes for deny, transform, local-only, receipt retrieval, upstream timeout, and
    provider rejection.
@@ -46,9 +57,11 @@ secret mechanism rather than command arguments or image layers.
 
 ## Key rotation
 
-`EGRYSA_INBOUND_KEYS` accepts comma-separated keys so an old and new key can overlap. Deploy both,
-move clients, then remove the old key. Rotate `EGRYSA_RECEIPT_HMAC_KEY` only with a documented chain
-boundary; v0.1 does not expose a key identifier.
+`EGRYSA_INBOUND_KEYS` accepts comma-separated `workload_id=key` entries so an old and new key can
+overlap. Keep the workload ID stable, deploy both keys, move clients, then remove the old key.
+Rotate the receipt Ed25519 keypair only with a documented chain transition because prior receipts
+depend on the published public key. Rotate the independent fingerprint key under the same evidence
+procedure.
 
 ## Incident response
 
