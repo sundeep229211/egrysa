@@ -183,8 +183,8 @@ components:
       ]
       properties:
         version:
-          enum: ["2", "3"]
-          description: Version 3 adds semantic-detector evidence; disabled mode remains version 2.
+          enum: ["2", "3", "4"]
+          description: Version 3 adds semantic-detector evidence; version 4 adds egress outcome for provider invocations.
         id: { type: string, format: uuid }
         chainId: { type: string }
         sequence: { type: integer, minimum: 1 }
@@ -198,7 +198,7 @@ components:
         transformedFields: { type: integer, minimum: 0 }
         detectors:
           type: array
-          description: Detector IDs and versions that ran. Present only in version 3 receipts.
+          description: Detector IDs and versions that ran. Present in version 3 and semantic-enabled version 4 receipts.
           items:
             type: object
             additionalProperties: false
@@ -209,6 +209,9 @@ components:
         detectorDegraded:
           type: boolean
           description: True when semantic detection failed and no semantic findings were used.
+        egress:
+          enum: [completed, failed, started]
+          description: Present and required for version 4. Streaming receipts attest started egress only.
         rawContentPersisted: { const: false }
         providerStoreRequested: { const: false }
         previousReceiptHash: { type: [string, "null"] }

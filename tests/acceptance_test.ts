@@ -159,7 +159,15 @@ Deno.test("black-box compatibility and evidence acceptance", async () => {
         messages: [{ role: "user", content: "timeout" }],
         seed: 504,
       });
-      assert(timeout.status === 504, "provider timeout");
+      const timeoutBody = await timeout.json();
+      assert(
+        timeout.status === 504 && typeof timeoutBody.receiptId === "string",
+        "provider timeout",
+      );
+      const timeoutReceipt = await (await authorizedFetch(
+        `${baseUrl}/v1/receipts/${timeoutBody.receiptId}`,
+      )).json();
+      assert(timeoutReceipt.egress === "failed", "provider timeout receipt");
 
       const cancellable = await chat(baseUrl, {
         model: "approved-model",
@@ -175,6 +183,7 @@ Deno.test("black-box compatibility and evidence acceptance", async () => {
 
       const checkpoint = await authorizedFetch(`${baseUrl}/v1/receipts/checkpoint`);
       const beforeRestart = await checkpoint.json();
+      await gateway.close();
       const restarted = await Gateway.create(config);
       const afterRestart = await (await restarted.handle(
         new Request(
@@ -187,8 +196,10 @@ Deno.test("black-box compatibility and evidence acceptance", async () => {
           afterRestart.receiptHash === beforeRestart.receiptHash,
         "receipt restart continuity",
       );
+      await restarted.close();
     } finally {
       await server.shutdown();
+      await gateway.close();
     }
   } finally {
     await provider.shutdown();
@@ -245,7 +256,7 @@ Deno.test("local semantic detector transforms egress and emits verifiable attrib
     const receipt = await (await gateway.handle(
       new Request(`http://gateway/v1/receipts/${receiptId}`, { headers: authHeaders() }),
     )).json();
-    assert(receipt.version === "3", "semantic receipt version");
+    assert(receipt.version === "4" && receipt.egress === "completed", "semantic receipt version");
     assert(receipt.decision === "transform", "semantic receipt decision");
     assert(receipt.findingCounts.person_name === 1, "semantic receipt finding count");
     assert(receipt.detectorDegraded === false, "semantic receipt degradation");

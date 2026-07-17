@@ -75,6 +75,8 @@ export function hasSurrogateResidue(
   for (const token of mapping.keys()) unknown = unknown.replaceAll(token, "");
   unknown = unknown.replace(/\s+/g, "");
   return complete
-    ? /_+egrysa[_-][\w-]{4,128}/i.test(unknown)
-    : /_+egrysa[_-][\w-]{1,128}[_-]{2}/i.test(unknown);
+    ? /(?:_+egrysa[_-][\w-]{4,128}|\begrysa[_-][\w-]{4,128})/i.test(unknown)
+    : /(?:_+egrysa[_-][\w-]{1,128}[_-]{2}|\begrysa[_-][\w-]{1,128}[_-]{2})/i.test(
+      unknown,
+    );
 }

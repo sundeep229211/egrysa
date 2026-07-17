@@ -138,7 +138,7 @@ class BufferedRecomposer {
     for (const original of this.mapping.values()) {
       if (original) audit = audit.replaceAll(original, "\0".repeat(original.length));
     }
-    for (const match of audit.matchAll(/_+egrysa[_-]/gi)) {
+    for (const match of audit.matchAll(/(?:_+egrysa[_-]|\begrysa[_-][\w-]{4,128})/gi)) {
       if ((match.index ?? Number.POSITIVE_INFINITY) < boundary) {
         throw new RecompositionError("provider damaged a surrogate token");
       }

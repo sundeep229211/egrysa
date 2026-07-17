@@ -12,4 +12,22 @@ console.log(
     port: config.listen.port,
   }),
 );
-Deno.serve({ ...config.listen, onListen: () => undefined }, (request) => gateway.handle(request));
+const server = Deno.serve(
+  { ...config.listen, onListen: () => undefined },
+  (request) => gateway.handle(request),
+);
+let shutdownRequested = false;
+const requestShutdown = () => {
+  if (shutdownRequested) return;
+  shutdownRequested = true;
+  void server.shutdown();
+};
+Deno.addSignalListener("SIGINT", requestShutdown);
+Deno.addSignalListener("SIGTERM", requestShutdown);
+try {
+  await server.finished;
+} finally {
+  Deno.removeSignalListener("SIGINT", requestShutdown);
+  Deno.removeSignalListener("SIGTERM", requestShutdown);
+  await gateway.close();
+}

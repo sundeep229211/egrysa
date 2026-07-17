@@ -13,9 +13,13 @@
 - Externally retained signed checkpoints and HSM/KMS signing before receipts are treated as
   independently anchored audit evidence.
 
-The JSONL receipt chain survives process restarts on durable storage, but it remains single-writer.
-Run one replica until a consistency-aware sequencing backend exists. A holder of the software
-signing key can rewrite unanchored history, so retain signed checkpoints outside the gateway.
+The JSONL receipt chain fsyncs every receipt before request handling continues and survives process
+restarts on durable storage, but it remains single-writer. `receiptMaxLogBytes` defaults to 64 MiB.
+At the limit, Egrysa renames the active log with its last sequence and starts a new log with a
+signed chain-head checkpoint; archived segments are not loaded at startup and need an operator
+retention policy. Run one replica until a consistency-aware sequencing backend exists. A holder of
+the software signing key can rewrite unanchored history, so retain signed checkpoints outside the
+gateway.
 
 ## Container boundary
 
@@ -59,7 +63,8 @@ Keep the local provider model allowlist and detector block aligned, then enable 
     "enabled": true,
     "providerId": "local",
     "model": "gpt-oss:20b",
-    "timeoutMs": 2000,
+    "timeoutMs": 10000,
+    "totalTimeoutMs": 30000,
     "maxInputBytes": 16384,
     "onDetectorFailure": "degrade",
     "kinds": ["person_name", "physical_address", "semantic_confidential"]
@@ -73,10 +78,12 @@ findings are deliberately low precision. Even if a future detector emits a low-p
 for a blocked kind, policy routes it locally instead of allowing it to hard-deny traffic.
 
 `maxInputBytes` is a per-model-call bound. Larger text surfaces are split on whitespace with at
-least 64 bytes of overlap, so size local inference for the number of text surfaces and chunks in a
-request. The measured `gpt-oss:20b` reference run on an Apple M4 Pro had 11.95 seconds p95 added
-latency across short prompts; the default two-second deadline is therefore an alpha safety bound,
-not a universal sizing recommendation. Measure the chosen model and hardware before enabling the
+least 64 bytes of overlap. `timeoutMs` is the deadline for each chunk, while `totalTimeoutMs` is the
+deadline for the whole text surface and must be at least `timeoutMs`. Inputs requiring more than
+approximately `totalTimeoutMs / timeoutMs` sequential chunks will degrade even if every chunk meets
+its individual deadline, so size `maxInputBytes` and both budgets together. The measured
+`gpt-oss:20b` reference run on an Apple M4 Pro had 11.95 seconds p95 added latency across short
+prompts; measure the chosen model, hardware, surface count, and chunk count before enabling the
 detector on interactive traffic.
 
 On timeout, connection failure, invalid schema, or a bounded-input/response failure, Egrysa drops
@@ -104,7 +111,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 ```
 
 The inference request receives a request-scoped `__EGRYSA_PERSON_NAME_...__` surrogate, the client
-response is recomposed to `Ada Lovelace`, and the version-3 receipt identifies
+response is recomposed to `Ada Lovelace`, and the version-4 completed-egress receipt identifies
 `egrysa.reference.local-semantic@0.2.0`. Run `deno task eval:semantic` with an enabled config to
 measure the local model without making live recall a release gate.
 

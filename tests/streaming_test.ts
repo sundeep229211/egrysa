@@ -33,6 +33,37 @@ Deno.test("streaming fails before a damaged surrogate prefix can escape holdback
   }
 });
 
+Deno.test("streaming catches residue whose full leading prefix was stripped", async () => {
+  const token = "__EGRYSA_EMAIL_0001_abc123__";
+  const mapping = new Map([[token, "damaged@example.com"]]);
+  const upstream = streamFrom(
+    `data: ${JSON.stringify(chunk(`EGRYSA_PII_0__${" ordinary prose".repeat(12)}`))}\n\n` +
+      "data: [DONE]\n\n",
+  );
+  const output = await new Response(
+    recomposeOpenAiStream(upstream, mapping, () => undefined, () => undefined),
+  ).text();
+  if (!output.includes('"type":"recomposition_error"') || output.includes("EGRYSA_PII_0__")) {
+    throw new Error("bare surrogate residue escaped the streaming audit");
+  }
+});
+
+Deno.test("ordinary Egrysa prose passes the streaming residue audit", async () => {
+  const token = "__EGRYSA_EMAIL_0001_abc123__";
+  const mapping = new Map([[token, "clean@example.com"]]);
+  const upstream = streamFrom(
+    `data: ${JSON.stringify(chunk("Egrysa is a gateway"))}\n\n` + "data: [DONE]\n\n",
+  );
+  const output = await new Response(
+    recomposeOpenAiStream(upstream, mapping, () => {
+      throw new Error("ordinary prose unexpectedly failed recomposition");
+    }, () => undefined),
+  ).text();
+  if (!output.includes("Egrysa is a gateway") || output.includes("recomposition_error")) {
+    throw new Error("ordinary product-name prose did not pass the streaming audit");
+  }
+});
+
 Deno.test("DONE tail flush preserves the latest completion chunk template", async () => {
   const token = "__EGRYSA_EMAIL_0001_abc123__";
   const original = "tail@example.com";

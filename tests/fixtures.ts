@@ -7,6 +7,7 @@ export function testConfig(): AppConfig {
     requestTimeoutMs: 5_000,
     receiptCapacity: 100,
     receiptLogPath: ":memory:",
+    receiptMaxLogBytes: 64 * 1024 * 1024,
     receiptChainId: "egrysa-test",
     providers: [
       {
@@ -30,7 +31,8 @@ export function testConfig(): AppConfig {
       enabled: false,
       providerId: "local",
       model: "approved-model",
-      timeoutMs: 2_000,
+      timeoutMs: 10_000,
+      totalTimeoutMs: 30_000,
       maxInputBytes: 16_384,
       onDetectorFailure: "degrade",
       kinds: ["person_name", "physical_address", "semantic_confidential"],

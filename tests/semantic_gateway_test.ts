@@ -28,7 +28,8 @@ Deno.test("semantic timeout degrades to deterministic-only with content-free evi
       }
       const receipt = JSON.parse(receiptText);
       if (
-        receipt.version !== "3" || receipt.detectorDegraded !== true ||
+        receipt.version !== "4" || receipt.egress !== "completed" ||
+        receipt.detectorDegraded !== true ||
         !receipt.detectors.some((item: Record<string, unknown>) =>
           item.id === "egrysa.reference.local-semantic"
         )

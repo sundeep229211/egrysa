@@ -8,6 +8,7 @@ import {
 } from "./crypto.ts";
 import type {
   Decision,
+  EgressOutcome,
   Finding,
   PrivacyReceipt,
   ReceiptCheckpoint,
@@ -24,6 +25,7 @@ interface ReceiptInput {
   transformedFields: number;
   detectors?: ReceiptDetector[];
   detectorDegraded?: boolean;
+  egress?: EgressOutcome;
 }
 
 export interface ReceiptStoreOptions {
@@ -33,6 +35,7 @@ export interface ReceiptStoreOptions {
   chainId: string;
   logPath: string;
   capacity: number;
+  maxLogBytes: number;
 }
 
 export class ReceiptStore {
@@ -40,6 +43,10 @@ export class ReceiptStore {
   #previousHash: string | null = null;
   #sequence = 0;
   #queue: Promise<unknown> = Promise.resolve();
+  #file: Deno.FsFile | undefined;
+  #logBytes = 0;
+  #activeReceiptCount = 0;
+  #closing = false;
 
   private constructor(
     private readonly options: ReceiptStoreOptions,
@@ -55,6 +62,10 @@ export class ReceiptStore {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(options.chainId)) {
       throw new Error("receiptChainId must be a stable identifier");
     }
+    if (
+      !Number.isInteger(options.maxLogBytes) || options.maxLogBytes < 1024 ||
+      options.maxLogBytes > 1024 * 1024 * 1024
+    ) throw new Error("receipt maxLogBytes must be between 1 KiB and 1 GiB");
     const privateKey = await importEd25519PrivateKey(options.privateKeyPkcs8);
     const publicKey = await importEd25519PublicKey(options.publicKeySpki);
     const signingKeyId = await signingKeyIdentifier(options.publicKeySpki);
@@ -64,10 +75,12 @@ export class ReceiptStore {
     }
     const store = new ReceiptStore(options, privateKey, publicKey, signingKeyId);
     await store.#load();
+    await store.#openLog();
     return store;
   }
 
   create(input: ReceiptInput): Promise<PrivacyReceipt> {
+    if (this.#closing) return Promise.reject(new Error("receipt store is closed"));
     const operation = this.#queue.then(() => this.#create(input));
     this.#queue = operation.catch(() => undefined);
     return operation;
@@ -86,7 +99,24 @@ export class ReceiptStore {
     };
   }
 
-  async checkpoint(): Promise<ReceiptCheckpoint> {
+  checkpoint(): Promise<ReceiptCheckpoint> {
+    const operation = this.#queue.then(() => this.#buildCheckpoint());
+    this.#queue = operation.catch(() => undefined);
+    return operation;
+  }
+
+  async close(): Promise<void> {
+    if (this.#closing) {
+      await this.#queue;
+      return;
+    }
+    this.#closing = true;
+    const operation = this.#queue.then(() => this.#closeLog());
+    this.#queue = operation.catch(() => undefined);
+    await operation;
+  }
+
+  async #buildCheckpoint(): Promise<ReceiptCheckpoint> {
     const unsigned = {
       version: "1" as const,
       chainId: this.options.chainId,
@@ -130,13 +160,25 @@ export class ReceiptStore {
       signingKeyId: this.signingKeyId,
     };
     const detectors = input.detectors === undefined ? undefined : uniqueDetectors(input.detectors);
-    const unsigned = detectors === undefined ? { version: "2" as const, ...common, ...tail } : {
-      version: "3" as const,
-      ...common,
-      detectors,
-      detectorDegraded: input.detectorDegraded ?? false,
-      ...tail,
-    };
+    const detectorEvidence = detectors === undefined
+      ? {}
+      : { detectors, detectorDegraded: input.detectorDegraded ?? false };
+    const unsigned = input.egress !== undefined
+      ? {
+        version: "4" as const,
+        ...common,
+        egress: input.egress,
+        ...detectorEvidence,
+        ...tail,
+      }
+      : detectors === undefined
+      ? { version: "2" as const, ...common, ...tail }
+      : {
+        version: "3" as const,
+        ...common,
+        ...detectorEvidence,
+        ...tail,
+      };
     const receiptHash = await sha256(JSON.stringify(unsigned));
     const receipt = {
       ...unsigned,
@@ -167,12 +209,33 @@ export class ReceiptStore {
       } catch {
         throw new Error(`receipt log contains invalid JSON at line ${index + 1}`);
       }
+      if (index === 0 && isCheckpoint(parsed)) {
+        await this.#loadCheckpoint(parsed);
+        continue;
+      }
       const receipt = parsed as PrivacyReceipt;
       await this.#verifyNext(receipt, index + 1);
       this.#sequence = receipt.sequence;
       this.#previousHash = receipt.receiptHash;
       this.#remember(receipt);
+      this.#activeReceiptCount++;
     }
+  }
+
+  async #loadCheckpoint(checkpoint: ReceiptCheckpoint): Promise<void> {
+    if (
+      checkpoint.chainId !== this.options.chainId ||
+      checkpoint.signingKeyId !== this.signingKeyId || !Number.isInteger(checkpoint.sequence) ||
+      checkpoint.sequence < 0 ||
+      (checkpoint.receiptHash !== null && !/^[a-f0-9]{64}$/.test(checkpoint.receiptHash)) ||
+      !await ed25519Verify(
+        this.publicKey,
+        checkpoint.signature,
+        JSON.stringify(unsignedCheckpoint(checkpoint)),
+      )
+    ) throw new Error("receipt log checkpoint verification failed at line 1");
+    this.#sequence = checkpoint.sequence;
+    this.#previousHash = checkpoint.receiptHash;
   }
 
   async #verifyNext(receipt: PrivacyReceipt, line: number): Promise<void> {
@@ -190,14 +253,72 @@ export class ReceiptStore {
 
   async #append(receipt: PrivacyReceipt): Promise<void> {
     if (this.options.logPath === ":memory:") return;
+    const line = `${JSON.stringify(receipt)}\n`;
+    const lineBytes = new TextEncoder().encode(line).byteLength;
+    if (
+      this.#activeReceiptCount > 0 &&
+      this.#logBytes + lineBytes > this.options.maxLogBytes
+    ) {
+      await this.#rotate();
+    }
+    await this.#writeLine(line);
+    this.#activeReceiptCount++;
+  }
+
+  async #rotate(): Promise<void> {
+    const sequence = this.#sequence;
+    const rotatedPath = `${this.options.logPath}.${sequence}`;
+    try {
+      await Deno.stat(rotatedPath);
+      throw new Error(`receipt rotation target already exists for sequence ${sequence}`);
+    } catch (error) {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    }
+    const checkpoint = await this.#buildCheckpoint();
+    await this.#closeLog();
+    await Deno.rename(this.options.logPath, rotatedPath);
+    this.#logBytes = 0;
+    this.#activeReceiptCount = 0;
+    await this.#openLog();
+    await this.#writeLine(`${JSON.stringify(checkpoint)}\n`);
+  }
+
+  async #openLog(): Promise<void> {
+    if (this.options.logPath === ":memory:") return;
     const separator = this.options.logPath.lastIndexOf("/");
     if (separator > 0) {
       await Deno.mkdir(this.options.logPath.slice(0, separator), { recursive: true });
     }
-    await Deno.writeTextFile(this.options.logPath, `${JSON.stringify(receipt)}\n`, {
+    this.#file = await Deno.open(this.options.logPath, {
       append: true,
       create: true,
+      write: true,
     });
+    this.#logBytes = (await this.#file.stat()).size;
+  }
+
+  async #writeLine(line: string): Promise<void> {
+    if (!this.#file) throw new Error("receipt log is not open");
+    const bytes = new TextEncoder().encode(line);
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const written = await this.#file.write(bytes.subarray(offset));
+      if (written === 0) throw new Error("receipt log write made no progress");
+      offset += written;
+    }
+    await this.#file.sync();
+    this.#logBytes += bytes.byteLength;
+  }
+
+  async #closeLog(): Promise<void> {
+    const file = this.#file;
+    if (!file) return;
+    this.#file = undefined;
+    try {
+      await file.sync();
+    } finally {
+      file.close();
+    }
   }
 
   #remember(receipt: PrivacyReceipt): void {
@@ -240,7 +361,9 @@ function unsignedReceipt(
     model: receipt.model,
     findingCounts: receipt.findingCounts,
     transformedFields: receipt.transformedFields,
-    ...(receipt.version === "3"
+    ...(receipt.version === "4" ? { egress: receipt.egress } : {}),
+    ...(receipt.version === "3" ||
+        (receipt.version === "4" && receipt.detectors !== undefined)
       ? { detectors: receipt.detectors, detectorDegraded: receipt.detectorDegraded }
       : {}),
     rawContentPersisted: receipt.rawContentPersisted,
@@ -259,14 +382,87 @@ function uniqueDetectors(detectors: ReceiptDetector[]): ReceiptDetector[] {
 }
 
 function validReceiptVersion(receipt: PrivacyReceipt): boolean {
+  if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return false;
+  const commonKeys = [
+    "version",
+    "id",
+    "chainId",
+    "sequence",
+    "timestamp",
+    "workloadId",
+    "requestFingerprint",
+    "decision",
+    "provider",
+    "model",
+    "findingCounts",
+    "transformedFields",
+    "rawContentPersisted",
+    "providerStoreRequested",
+    "previousReceiptHash",
+    "receiptHash",
+    "signingKeyId",
+    "signature",
+  ];
   if (receipt.version === "2") {
-    return !("detectors" in receipt) && !("detectorDegraded" in receipt);
+    return hasExactKeys(receipt, commonKeys);
   }
-  return receipt.version === "3" && typeof receipt.detectorDegraded === "boolean" &&
-    Array.isArray(receipt.detectors) &&
-    receipt.detectors.every((detector) =>
-      detector && typeof detector.id === "string" && !!detector.id &&
+  if (receipt.version === "3") {
+    return hasExactKeys(receipt, [...commonKeys, "detectors", "detectorDegraded"]) &&
+      validDetectorEvidence(receipt.detectors, receipt.detectorDegraded);
+  }
+  if (receipt.version !== "4" || !["completed", "failed", "started"].includes(receipt.egress)) {
+    return false;
+  }
+  const hasDetectors = "detectors" in receipt;
+  const hasDegraded = "detectorDegraded" in receipt;
+  if (hasDetectors !== hasDegraded) return false;
+  return hasExactKeys(
+    receipt,
+    [...commonKeys, "egress", ...(hasDetectors ? ["detectors", "detectorDegraded"] : [])],
+  ) && (!hasDetectors || validDetectorEvidence(receipt.detectors, receipt.detectorDegraded));
+}
+
+function validDetectorEvidence(detectors: unknown, degraded: unknown): boolean {
+  return typeof degraded === "boolean" && Array.isArray(detectors) &&
+    detectors.every((detector) =>
+      detector && typeof detector === "object" && !Array.isArray(detector) &&
+      typeof detector.id === "string" && !!detector.id &&
       typeof detector.version === "string" && !!detector.version &&
-      Object.keys(detector).every((key) => key === "id" || key === "version")
+      hasExactKeys(detector, ["id", "version"])
     );
+}
+
+function isCheckpoint(value: unknown): value is ReceiptCheckpoint {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const checkpoint = value as Record<string, unknown>;
+  return checkpoint.version === "1" &&
+    hasExactKeys(checkpoint, [
+      "version",
+      "chainId",
+      "sequence",
+      "receiptHash",
+      "timestamp",
+      "signingKeyId",
+      "signature",
+    ]) && typeof checkpoint.chainId === "string" &&
+    typeof checkpoint.timestamp === "string" && typeof checkpoint.signingKeyId === "string" &&
+    typeof checkpoint.signature === "string";
+}
+
+function unsignedCheckpoint(checkpoint: ReceiptCheckpoint): Record<string, unknown> {
+  return {
+    version: checkpoint.version,
+    chainId: checkpoint.chainId,
+    sequence: checkpoint.sequence,
+    receiptHash: checkpoint.receiptHash,
+    timestamp: checkpoint.timestamp,
+    signingKeyId: checkpoint.signingKeyId,
+  };
+}
+
+function hasExactKeys(value: object, expected: string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return actual.length === sortedExpected.length &&
+    actual.every((key, index) => key === sortedExpected[index]);
 }

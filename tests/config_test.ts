@@ -31,6 +31,22 @@ Deno.test("configuration requires exactly one policy action per data class", () 
   assertThrows(() => validateConfig(conflicting), "api_secret has conflicting policy actions");
 });
 
+Deno.test("configuration validates the receipt rotation size", () => {
+  const tooSmall = testConfig();
+  tooSmall.receiptMaxLogBytes = 1_023;
+  assertThrows(
+    () => validateConfig(tooSmall),
+    "receiptMaxLogBytes must be between 1 KiB and 1 GiB",
+  );
+
+  const tooLarge = testConfig();
+  tooLarge.receiptMaxLogBytes = 1024 * 1024 * 1024 + 1;
+  assertThrows(
+    () => validateConfig(tooLarge),
+    "receiptMaxLogBytes must be between 1 KiB and 1 GiB",
+  );
+});
+
 Deno.test("configuration rejects unknown policy data classes", () => {
   const config = testConfig();
   (config.policy.transformKinds as string[]).push("unknown_identifier");
@@ -64,12 +80,14 @@ Deno.test("configuration rejects a remote semantic detector endpoint at startup"
 Deno.test("semantic detector defaults are bounded and degradation-first", () => {
   const config = testConfig();
   delete config.semanticDetector!.timeoutMs;
+  delete config.semanticDetector!.totalTimeoutMs;
   delete config.semanticDetector!.maxInputBytes;
   delete config.semanticDetector!.onDetectorFailure;
   validateConfig(config);
   const detector = resolveSemanticDetectorConfig(config);
   if (
-    detector.timeoutMs !== 2_000 || detector.maxInputBytes !== 16_384 ||
+    detector.timeoutMs !== 10_000 || detector.totalTimeoutMs !== 30_000 ||
+    detector.maxInputBytes !== 16_384 ||
     detector.onDetectorFailure !== "degrade"
   ) throw new Error("semantic detector defaults changed");
 
@@ -79,6 +97,16 @@ Deno.test("semantic detector defaults are bounded and degradation-first", () => 
   if (resolveSemanticDetectorConfig(absent).enabled) {
     throw new Error("semantic detector was not off by default");
   }
+});
+
+Deno.test("semantic detector total timeout cannot be shorter than one chunk timeout", () => {
+  const config = testConfig();
+  config.semanticDetector!.timeoutMs = 10_000;
+  config.semanticDetector!.totalTimeoutMs = 9_999;
+  assertThrows(
+    () => validateConfig(config),
+    "semanticDetector.totalTimeoutMs must be at least timeoutMs",
+  );
 });
 
 function assertThrows(action: () => void, expected: string): void {

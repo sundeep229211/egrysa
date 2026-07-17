@@ -57,6 +57,7 @@ export interface SemanticDetectorConfig {
   providerId?: string;
   model?: string;
   timeoutMs?: number;
+  totalTimeoutMs?: number;
   maxInputBytes?: number;
   onDetectorFailure?: "degrade" | "deny";
   kinds?: SemanticFindingKind[];
@@ -68,6 +69,7 @@ export interface AppConfig {
   requestTimeoutMs: number;
   receiptCapacity: number;
   receiptLogPath: string;
+  receiptMaxLogBytes?: number;
   receiptChainId: string;
   providers: ProviderConfig[];
   semanticDetector?: SemanticDetectorConfig;
@@ -162,7 +164,16 @@ export interface PrivacyReceiptV3 extends PrivacyReceiptBase {
   detectorDegraded: boolean;
 }
 
-export type PrivacyReceipt = PrivacyReceiptV2 | PrivacyReceiptV3;
+export type EgressOutcome = "completed" | "failed" | "started";
+
+export interface PrivacyReceiptV4 extends PrivacyReceiptBase {
+  version: "4";
+  egress: EgressOutcome;
+  detectors?: ReceiptDetector[];
+  detectorDegraded?: boolean;
+}
+
+export type PrivacyReceipt = PrivacyReceiptV2 | PrivacyReceiptV3 | PrivacyReceiptV4;
 
 export interface ReceiptCheckpoint {
   version: "1";

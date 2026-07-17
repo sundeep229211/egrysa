@@ -19,7 +19,9 @@ flowchart TB
       LM --> RC["Local recomposition"]
       SV --> RC
       RC --> U
-      P --> PR["Signed content-minimized policy receipt"]
+      B --> PR["Signed content-minimized policy receipt"]
+      E --> PR
+      LM --> PR
     end
 
     E --> DNS["Customer DNS / network / TLS"]
@@ -52,11 +54,12 @@ flowchart TB
 - Receipts contain workload attribution, a keyed nonce-bound request fingerprint, finding counts,
   decision, provider/model identifiers, and chain/signature values only. They contain no raw prompt
   or response content.
-- Receipts are created after policy selection and before provider invocation. They evidence the
-  decision and intended provider/model, not successful upstream delivery; a provider rejection or
-  timeout can leave a valid receipt.
-- When semantic detection is enabled, version-3 receipts add only detector IDs/versions and a
-  degradation boolean. Disabled mode retains the version-2 receipt shape.
+- Denials retain version-2/version-3 policy receipts. Provider attempts use version-4 receipts:
+  non-streaming success records `egress:completed`, invocation failure records `egress:failed`, and
+  streaming records `egress:started` after upstream response headers arrive. Stream completion
+  attestation is not claimed.
+- When semantic detection is enabled, receipts add only detector IDs/versions and a degradation
+  boolean. No receipt records finding text or request/response content.
 - Provider credentials are read from named environment variables and never accepted in request
   bodies.
 - Remote providers require HTTPS; plaintext HTTP is limited to loopback providers explicitly marked
@@ -64,6 +67,9 @@ flowchart TB
 - OpenAI-compatible upstream payloads use an allowlist of fields and force `store:false`.
 - Streaming SSE content and tool-call argument fragments use bounded local recomposition. Anthropic
   streaming and multimodal content fail closed.
+- Recomposition treats token-shaped, case-insensitive `EGRYSA_...` fragments as suspected damage
+  even when a provider removes all leading underscores. This intentionally favors failing closed;
+  ordinary prose such as “Egrysa is a gateway” lacks the separator/body shape and is not residue.
 - Function definitions, message content, tool-call arguments, tool results, and JSON-schema string
   values are inspected. Sensitive structural schema keys cannot be transformed and are denied.
 - Semantic detector inputs use only a configured loopback provider marked `local:true`; redirects

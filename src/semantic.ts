@@ -46,6 +46,7 @@ export function createSemanticDetector(config: AppConfig): LocalDetector | null 
     provider,
     settings.model,
     settings.timeoutMs,
+    settings.totalTimeoutMs,
     settings.maxInputBytes,
     new Set(settings.kinds),
   );
@@ -57,7 +58,8 @@ class ReferenceSemanticDetector implements LocalDetector {
   constructor(
     private readonly provider: ProviderConfig,
     private readonly model: string,
-    timeoutMs: number,
+    private readonly chunkTimeoutMs: number,
+    totalTimeoutMs: number,
     private readonly maxInputBytes: number,
     private readonly kinds: ReadonlySet<SemanticFindingKind>,
   ) {
@@ -66,7 +68,7 @@ class ReferenceSemanticDetector implements LocalDetector {
       id: REFERENCE_SEMANTIC_DETECTOR_ID,
       version: REFERENCE_SEMANTIC_DETECTOR_VERSION,
       provenance: "reference",
-      timeoutMs,
+      timeoutMs: totalTimeoutMs,
     };
   }
 
@@ -102,27 +104,36 @@ class ReferenceSemanticDetector implements LocalDetector {
   }
 
   async #invoke(text: string, signal: AbortSignal): Promise<unknown> {
-    let response = await detectorFetch(this.provider, this.model, text, signal, true);
-    if ([400, 422].includes(response.status)) {
-      await response.body?.cancel();
-      response = await detectorFetch(this.provider, this.model, text, signal, false);
-    }
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new DetectorImplementationError("endpoint");
-    }
-    const raw = await readBoundedResponse(response);
-    let envelope: unknown;
     try {
-      envelope = JSON.parse(raw);
-    } catch {
-      throw new DetectorImplementationError("schema");
-    }
-    const content = completionContent(envelope);
-    try {
-      return JSON.parse(content);
-    } catch {
-      throw new DetectorImplementationError("schema");
+      const chunkSignal = AbortSignal.any([
+        signal,
+        AbortSignal.timeout(this.chunkTimeoutMs),
+      ]);
+      let response = await detectorFetch(this.provider, this.model, text, chunkSignal, true);
+      if ([400, 422].includes(response.status)) {
+        await response.body?.cancel();
+        response = await detectorFetch(this.provider, this.model, text, chunkSignal, false);
+      }
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new DetectorImplementationError("endpoint");
+      }
+      const raw = await readBoundedResponse(response);
+      let envelope: unknown;
+      try {
+        envelope = JSON.parse(raw);
+      } catch {
+        throw new DetectorImplementationError("schema");
+      }
+      const content = completionContent(envelope);
+      try {
+        return JSON.parse(content);
+      } catch {
+        throw new DetectorImplementationError("schema");
+      }
+    } catch (error) {
+      if (isAbortError(error)) throw new DetectorImplementationError("timeout");
+      throw error;
     }
   }
 }
@@ -158,7 +169,7 @@ async function detectorFetch(
       redirect: "error",
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
+    if (isAbortError(error)) {
       throw new DetectorImplementationError("timeout");
     }
     throw new DetectorImplementationError("connection");
@@ -315,4 +326,8 @@ function previousCodePointBoundary(text: string, index: number): number {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name);
 }

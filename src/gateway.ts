@@ -3,7 +3,12 @@ import { inspectChat, transformChat } from "./chat.ts";
 import { resolveSemanticDetectorConfig } from "./config.ts";
 import { Metrics } from "./metrics.ts";
 import { decide } from "./policy.ts";
-import { invokeProvider, mapResponseContent, ProviderError } from "./providers.ts";
+import {
+  invokeProvider,
+  mapResponseContent,
+  ProviderError,
+  type ProviderInvocation,
+} from "./providers.ts";
 import { ReceiptStore } from "./receipts.ts";
 import { recomposeOpenAiStream, RecompositionError } from "./streaming.ts";
 import { recomposeChecked } from "./surrogate.ts";
@@ -31,8 +36,13 @@ export class Gateway {
         chainId: config.receiptChainId,
         logPath: config.receiptLogPath,
         capacity: config.receiptCapacity,
+        maxLogBytes: config.receiptMaxLogBytes ?? 64 * 1024 * 1024,
       }),
     );
+  }
+
+  close(): Promise<void> {
+    return this.receipts.close();
   }
 
   async handle(request: Request): Promise<Response> {
@@ -67,6 +77,7 @@ export class Gateway {
     this.metrics.requests++;
     this.metrics.inFlight++;
     let receiptId: string | undefined;
+    let providerInvocationFailed = false;
     try {
       const body = await readJson(request, this.config.maxRequestBytes);
       const validation = validateChat(body);
@@ -168,7 +179,7 @@ export class Gateway {
         this.metrics.transformed++;
       }
 
-      const receipt = await this.receipts.create({
+      const receiptContext = {
         requestCanonical: originalJson,
         workloadId,
         decision: policy.decision,
@@ -177,13 +188,25 @@ export class Gateway {
         findings,
         transformedFields,
         ...detectorReceipt,
+      };
+      let invocation: ProviderInvocation;
+      try {
+        invocation = await invokeProvider(
+          policy.provider,
+          outbound,
+          this.config.requestTimeoutMs,
+        );
+      } catch (error) {
+        const receipt = await this.receipts.create({ ...receiptContext, egress: "failed" });
+        receiptId = receipt.id;
+        providerInvocationFailed = true;
+        throw error;
+      }
+      const receipt = await this.receipts.create({
+        ...receiptContext,
+        egress: invocation.type === "stream" ? "started" : "completed",
       });
       receiptId = receipt.id;
-      const invocation = await invokeProvider(
-        policy.provider,
-        outbound,
-        this.config.requestTimeoutMs,
-      );
       if (invocation.type === "stream") {
         const stream = recomposeOpenAiStream(
           invocation.response.body!,
@@ -230,10 +253,24 @@ export class Gateway {
         return problem(error.status, "provider_error", error.message, receiptId);
       }
       if (error instanceof DOMException && error.name === "AbortError") {
-        return problem(504, "provider_timeout", "The provider exceeded the configured deadline.");
+        return problem(
+          504,
+          "provider_timeout",
+          "The provider exceeded the configured deadline.",
+          receiptId,
+        );
       }
       if (error instanceof RequestError) {
         return problem(error.status, "invalid_request", error.message);
+      }
+      if (providerInvocationFailed) {
+        this.metrics.providerErrors++;
+        return problem(
+          502,
+          "provider_error",
+          "The provider invocation failed.",
+          receiptId,
+        );
       }
       console.error(
         JSON.stringify({

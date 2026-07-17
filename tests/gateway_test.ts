@@ -173,6 +173,65 @@ Deno.test("gateway transforms before egress and recomposes after inference", asy
     if (!downstream.includes("a@example.com") || downstream.includes("__EGRYSA_EMAIL_")) {
       throw new Error("local recomposition failed");
     }
+    const receiptId = response.headers.get("x-egrysa-receipt");
+    const receipt = await (await gateway.handle(
+      new Request(`http://gateway/v1/receipts/${receiptId}`, {
+        headers: { authorization: "Bearer a-test-client-key-that-is-long-enough" },
+      }),
+    )).json();
+    if (receipt.version !== "4" || receipt.egress !== "completed") {
+      throw new Error("successful provider invocation was not attested as completed egress");
+    }
+  } finally {
+    await server.shutdown();
+  }
+});
+
+Deno.test("gateway records failed provider invocation before returning its receipt id", async () => {
+  await configureTestEnvironment();
+  let resolveAddress!: (port: number) => void;
+  const portPromise = new Promise<number>((resolve) => resolveAddress = resolve);
+  const server = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: ({ port }) => resolveAddress(port),
+  }, () => new Response("unavailable", { status: 503 }));
+  try {
+    const config = testConfig();
+    config.providers[1]!.baseUrl = `http://127.0.0.1:${await portPromise}/v1`;
+    const gateway = await Gateway.create(config);
+    const response = await gateway.handle(
+      new Request("http://gateway/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer a-test-client-key-that-is-long-enough",
+          "content-type": "application/json",
+          "x-egrysa-provider": "local",
+        },
+        body: JSON.stringify({
+          model: "approved-model",
+          messages: [{ role: "user", content: "ordinary request" }],
+        }),
+      }),
+    );
+    const problem = await response.json();
+    if (response.status !== 502 || typeof problem.receiptId !== "string") {
+      throw new Error("provider failure did not return an auditable receipt id");
+    }
+    const receipt = await (await gateway.handle(
+      new Request(`http://gateway/v1/receipts/${problem.receiptId}`, {
+        headers: { authorization: "Bearer a-test-client-key-that-is-long-enough" },
+      }),
+    )).json();
+    const checkpoint = await (await gateway.handle(
+      new Request("http://gateway/v1/receipts/checkpoint", {
+        headers: { authorization: "Bearer a-test-client-key-that-is-long-enough" },
+      }),
+    )).json();
+    if (
+      receipt.version !== "4" || receipt.egress !== "failed" || checkpoint.sequence !== 1 ||
+      receipt.sequence !== 1
+    ) throw new Error("failed invocation advanced the chain with an incorrect egress claim");
   } finally {
     await server.shutdown();
   }
@@ -334,6 +393,15 @@ Deno.test("gateway safely recomposes surrogate tokens split across SSE chunks", 
       response.status !== 200 || !stream.includes("alex@example.com") ||
       stream.includes("__EGRYSA_") || !stream.includes("[DONE]")
     ) throw new Error(`streaming recomposition failed: ${stream}`);
+    const receiptId = response.headers.get("x-egrysa-receipt");
+    const receipt = await (await gateway.handle(
+      new Request(`http://gateway/v1/receipts/${receiptId}`, {
+        headers: { authorization: "Bearer a-test-client-key-that-is-long-enough" },
+      }),
+    )).json();
+    if (receipt.version !== "4" || receipt.egress !== "started") {
+      throw new Error("streaming invocation was not attested as started egress");
+    }
   } finally {
     await server.shutdown();
   }

@@ -24,6 +24,15 @@ public tag.
 
 ### Changed
 
+- Provider-attempt receipts now use a strict version-4 shape with `completed`, `failed`, or
+  streaming `started` egress outcome; deny receipts and existing version-2/version-3 verification
+  remain unchanged.
+- Receipt logs now fsync each append, rotate at the configured size into sequence-suffixed archives,
+  and resume active-chain continuity from a verified signed checkpoint.
+- Semantic detection now applies a 10-second default per-chunk timeout and a separately validated
+  30-second total surface budget so sequential chunks do not share one per-call deadline.
+- Surrogate residue checks now fail closed on token-shaped `EGRYSA_...` fragments whose full leading
+  underscore prefix was removed, without rejecting ordinary product-name prose.
 - Selected Egrysa as the product, package, API namespace, configuration, deployment, and release
   name before the first public tag.
 - Added a container-specific configuration so the image listens on its container interface while

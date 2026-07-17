@@ -15,6 +15,7 @@ export interface ResolvedSemanticDetectorConfig {
   providerId: string;
   model: string;
   timeoutMs: number;
+  totalTimeoutMs: number;
   maxInputBytes: number;
   onDetectorFailure: "degrade" | "deny";
   kinds: SemanticFindingKind[];
@@ -48,6 +49,13 @@ export function validateConfig(config: AppConfig): void {
   ) throw new Error("receiptCapacity must be between 1 and 1000000");
   if (typeof config.receiptLogPath !== "string" || !config.receiptLogPath.trim()) {
     throw new Error("receiptLogPath must be a non-empty path");
+  }
+  const receiptMaxLogBytes = config.receiptMaxLogBytes ?? 64 * 1024 * 1024;
+  if (
+    !Number.isInteger(receiptMaxLogBytes) || receiptMaxLogBytes < 1024 ||
+    receiptMaxLogBytes > 1024 * 1024 * 1024
+  ) {
+    throw new Error("receiptMaxLogBytes must be between 1 KiB and 1 GiB");
   }
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(config.receiptChainId)) {
     throw new Error("receiptChainId must be a stable identifier");
@@ -83,7 +91,8 @@ export function resolveSemanticDetectorConfig(config: AppConfig): ResolvedSemant
     enabled: detector?.enabled ?? false,
     providerId: detector?.providerId ?? config.policy.localProvider,
     model: detector?.model ?? "gpt-oss:20b",
-    timeoutMs: detector?.timeoutMs ?? 2_000,
+    timeoutMs: detector?.timeoutMs ?? 10_000,
+    totalTimeoutMs: detector?.totalTimeoutMs ?? 30_000,
     maxInputBytes: detector?.maxInputBytes ?? 16_384,
     onDetectorFailure: detector?.onDetectorFailure ?? "degrade",
     kinds: [...(detector?.kinds ?? SEMANTIC_FINDING_KINDS)],
@@ -118,6 +127,15 @@ export function validateSemanticDetectorConfig(config: AppConfig): void {
     detector.timeoutMs > 300_000
   ) {
     throw new Error("semanticDetector.timeoutMs must be between 100 ms and 5 minutes");
+  }
+  if (
+    !Number.isInteger(detector.totalTimeoutMs) || detector.totalTimeoutMs < 100 ||
+    detector.totalTimeoutMs > 300_000
+  ) {
+    throw new Error("semanticDetector.totalTimeoutMs must be between 100 ms and 5 minutes");
+  }
+  if (detector.totalTimeoutMs < detector.timeoutMs) {
+    throw new Error("semanticDetector.totalTimeoutMs must be at least timeoutMs");
   }
   if (
     !Number.isInteger(detector.maxInputBytes) || detector.maxInputBytes < 256 ||
