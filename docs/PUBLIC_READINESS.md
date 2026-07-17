@@ -115,7 +115,7 @@ earlier commit, not verification of the current workspace.
 
 ## Not blockers for the public alpha
 
-- probabilistic or small-model semantic detection;
+- production-calibrated semantic detection beyond the off-by-default local reference detector;
 - cumulative exposure budgets;
 - cross-provider decomposition;
 - enterprise control plane, SSO, HA, KMS/HSM, or SIEM integrations;

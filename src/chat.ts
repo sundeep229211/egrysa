@@ -1,4 +1,10 @@
-import { classify } from "./classifier.ts";
+import {
+  classifyDetailed,
+  createDetectors,
+  type DetectorExecution,
+  removeOverlaps,
+} from "./classifier.ts";
+import { REFERENCE_SEMANTIC_DETECTOR_ID } from "./semantic.ts";
 import { createSurrogateState, transform } from "./surrogate.ts";
 import type { AppConfig, ChatRequest, Finding, JsonValue } from "./types.ts";
 
@@ -13,6 +19,8 @@ export interface ChatInspection {
   surfaces: TextSurface[];
   findings: Finding[];
   untransformableFindings: Finding[];
+  detectorExecutions: DetectorExecution[];
+  detectorDegraded: boolean;
 }
 
 export interface TransformedChat {
@@ -55,10 +63,20 @@ export async function inspectChat(chat: ChatRequest, config: AppConfig): Promise
       );
     }
   }
-  const surfaces: TextSurface[] = await Promise.all(candidates.map(async (surface) => ({
-    ...surface,
-    findings: await classify(surface.text, config),
+  const detectors = createDetectors(config);
+  const classified = await Promise.all(candidates.map(async (surface) => ({
+    surface,
+    result: await classifyDetailed(surface.text, config, detectors),
   })));
+  const detectorDegraded = classified.some(({ result }) => result.detectorDegraded);
+  const surfaces: TextSurface[] = classified.map(({ surface, result }) => ({
+    ...surface,
+    findings: detectorDegraded
+      ? removeOverlaps(
+        result.findings.filter((finding) => finding.detectorId !== REFERENCE_SEMANTIC_DETECTOR_ID),
+      )
+      : result.findings,
+  }));
   const findings = surfaces.flatMap((surface) => surface.findings);
   return {
     surfaces,
@@ -66,6 +84,8 @@ export async function inspectChat(chat: ChatRequest, config: AppConfig): Promise
     untransformableFindings: surfaces.filter((surface) => !surface.transformable).flatMap((
       surface,
     ) => surface.findings),
+    detectorExecutions: classified.flatMap(({ result }) => result.detectorExecutions),
+    detectorDegraded,
   };
 }
 

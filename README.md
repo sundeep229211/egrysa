@@ -13,8 +13,9 @@ sensitive value will be detected, or prove that a provider deleted data.
 ```mermaid
 flowchart LR
     U["Employee or application"] -->|"OpenAI-compatible request"| A["Egrysa inside customer boundary"]
-    A --> C["Classify"]
-    C --> P{"Policy"}
+    A --> C["Deterministic classification"]
+    C --> M["Optional customer-local semantic detector"]
+    M --> P{"Policy"}
     P -->|"deny"| D["Block + receipt"]
     P -->|"local only"| L["Customer-hosted model"]
     P -->|"transform"| S["Request-scoped surrogates"]
@@ -38,6 +39,9 @@ training settings are policy inputs that must be validated through contract and 
   Egrysa does not execute tools.
 - Deterministic detection for emails, phones, IP addresses, IBANs, payment cards, US SSNs, private
   keys, common API secrets, and configured confidential terms.
+- An off-by-default reference semantic detector calling only a configured local OpenAI-compatible
+  endpoint for person names, physical addresses, and semantically confidential content. It is
+  best-effort; measured evidence is in [EVALUATION.md](docs/EVALUATION.md).
 - Four decisions: `deny`, `local_only`, `transform`, and explicitly approved `allow_raw`.
 - Request-scoped, consistent surrogate replacement and local response recomposition.
 - OpenAI, Anthropic, and local OpenAI-compatible provider adapters.
@@ -63,6 +67,8 @@ training settings are policy inputs that must be validated through contract and 
 - No claim that a natural-language “forget” instruction changes provider retention. Contractual
   controls and supported API parameters are used instead.
 - No transparent employee identity header is forwarded to providers.
+- No remote semantic-detector option. Model findings are low precision, must match the source text
+  literally, and never replace deterministic detection as the fail-closed floor.
 
 ## Why open source first
 
@@ -97,8 +103,10 @@ Requirements: Deno 2.9.2. The repository has no external code dependencies.
    ```
 
 2. Keep provider keys in `.env.local`; never put them in JSON or Git.
-3. Review `config/egrysa.example.json`. Remote raw egress is disabled by default. Configure a local
-   model or explicitly approve clean raw egress only after the provider contract is reviewed.
+3. Review `config/egrysa.example.json`. Remote raw egress and the semantic detector are disabled by
+   default. Configure a local model or explicitly approve clean raw egress only after the provider
+   contract is reviewed. See [Operations](docs/OPERATIONS.md#reference-local-semantic-detector) for
+   the Ollama enablement and monitoring path.
 4. Run:
 
    ```sh

@@ -31,12 +31,67 @@ Deno.test("receipts are attributed, nonce-bound, chained, and publicly verifiabl
   if (first.workloadId !== "finance-copilot" || second.previousReceiptHash !== first.receiptHash) {
     throw new Error("receipt attribution or continuity is invalid");
   }
+  if (
+    first.version !== "2" || "detectors" in first || "detectorDegraded" in first
+  ) throw new Error("disabled detector changed the version-2 receipt shape");
   if (!await verifyReceipt(first, keys.publicKey)) {
     throw new Error("receipt did not verify with the public key");
   }
   const checkpoint = await store.checkpoint();
   if (checkpoint.sequence !== 2 || checkpoint.receiptHash !== second.receiptHash) {
     throw new Error("checkpoint did not identify the durable chain head");
+  }
+});
+
+Deno.test("version-3 receipts sign content-minimized detector evidence", async () => {
+  const keys = await configureTestEnvironment();
+  const path = await Deno.makeTempFile({ prefix: "egrysa-semantic-receipts-", suffix: ".jsonl" });
+  const options = {
+    fingerprintKey: "a-test-fingerprint-key-that-is-at-least-32-characters",
+    privateKeyPkcs8: keys.privateKey,
+    publicKeySpki: keys.publicKey,
+    chainId: "semantic-receipt-test",
+    logPath: path,
+    capacity: 10,
+  };
+  try {
+    const store = await ReceiptStore.open(options);
+    const receipt = await store.create({
+      requestCanonical: '{"messages":[{"content":"Ada Lovelace"}]}',
+      workloadId: "semantic-workload",
+      decision: "transform",
+      provider: "local",
+      model: "approved-model",
+      findings: [{
+        kind: "person_name",
+        start: 0,
+        end: 12,
+        value: "Ada Lovelace",
+        confidence: 0.9,
+        precision: "low",
+      }],
+      transformedFields: 1,
+      detectors: [
+        { id: "egrysa.reference.local-semantic", version: "0.2.0" },
+        { id: "egrysa.deterministic.patterns", version: "1.1.0" },
+        { id: "egrysa.reference.local-semantic", version: "0.2.0" },
+      ],
+      detectorDegraded: false,
+    });
+    if (
+      receipt.version !== "3" || receipt.detectorDegraded || receipt.detectors.length !== 2 ||
+      JSON.stringify(receipt).includes("Ada Lovelace")
+    ) throw new Error("version-3 detector evidence was not minimized and deduplicated");
+    if (!await verifyReceipt(receipt, keys.publicKey)) {
+      throw new Error("version-3 receipt did not verify");
+    }
+    const restarted = await ReceiptStore.open(options);
+    const checkpoint = await restarted.checkpoint();
+    if (checkpoint.sequence !== 1 || checkpoint.receiptHash !== receipt.receiptHash) {
+      throw new Error("version-3 receipt continuity did not survive restart");
+    }
+  } finally {
+    await Deno.remove(path).catch(() => undefined);
   }
 });
 

@@ -1,6 +1,24 @@
-import { type AppConfig, FINDING_KINDS, type FindingKind, type ProviderConfig } from "./types.ts";
+import {
+  type AppConfig,
+  FINDING_KINDS,
+  type FindingKind,
+  type ProviderConfig,
+  SEMANTIC_FINDING_KINDS,
+  type SemanticDetectorConfig,
+  type SemanticFindingKind,
+} from "./types.ts";
 
 const DEFAULT_PATH = "config/egrysa.example.json";
+
+export interface ResolvedSemanticDetectorConfig {
+  enabled: boolean;
+  providerId: string;
+  model: string;
+  timeoutMs: number;
+  maxInputBytes: number;
+  onDetectorFailure: "degrade" | "deny";
+  kinds: SemanticFindingKind[];
+}
 
 export async function loadConfig(
   path = Deno.env.get("EGRYSA_CONFIG") ?? DEFAULT_PATH,
@@ -46,6 +64,7 @@ export function validateConfig(config: AppConfig): void {
   if (!config.providers.find((provider) => provider.id === config.policy.localProvider)?.local) {
     throw new Error("localProvider must reference a provider inside the local trust boundary");
   }
+  validateSemanticDetectorConfig(config);
   validatePolicyTaxonomy(config);
   if (!Array.isArray(config.policy.sensitiveTerms)) {
     throw new Error("sensitiveTerms must be an array");
@@ -55,6 +74,79 @@ export function validateConfig(config: AppConfig): void {
       typeof item?.term !== "string" || typeof item.label !== "string" || item.term.length < 4 ||
       !item.label
     ) throw new Error("sensitive terms require a label and at least four characters");
+  }
+}
+
+export function resolveSemanticDetectorConfig(config: AppConfig): ResolvedSemanticDetectorConfig {
+  const detector = config.semanticDetector;
+  return {
+    enabled: detector?.enabled ?? false,
+    providerId: detector?.providerId ?? config.policy.localProvider,
+    model: detector?.model ?? "gpt-oss:20b",
+    timeoutMs: detector?.timeoutMs ?? 2_000,
+    maxInputBytes: detector?.maxInputBytes ?? 16_384,
+    onDetectorFailure: detector?.onDetectorFailure ?? "degrade",
+    kinds: [...(detector?.kinds ?? SEMANTIC_FINDING_KINDS)],
+  };
+}
+
+export function validateSemanticDetectorConfig(config: AppConfig): void {
+  const raw = config.semanticDetector;
+  if (raw === undefined) return;
+  if (!raw || typeof raw !== "object" || typeof raw.enabled !== "boolean") {
+    throw new Error("semanticDetector.enabled must be boolean");
+  }
+  validateOptionalSemanticFields(raw);
+  const detector = resolveSemanticDetectorConfig(config);
+  const provider = config.providers.find((candidate) => candidate.id === detector.providerId);
+  if (!provider) throw new Error("semanticDetector.providerId does not exist");
+  if (!provider.local) {
+    throw new Error("semanticDetector.providerId must reference a local provider");
+  }
+  const detectorUrl = new URL(provider.baseUrl);
+  if (!["localhost", "127.0.0.1", "::1"].includes(detectorUrl.hostname)) {
+    throw new Error("semanticDetector provider must use a loopback endpoint");
+  }
+  if (provider.kind === "anthropic") {
+    throw new Error("semanticDetector provider must be OpenAI-compatible");
+  }
+  if (!provider.allowedModels.includes(detector.model)) {
+    throw new Error("semanticDetector.model is not allowed by its local provider");
+  }
+  if (
+    !Number.isInteger(detector.timeoutMs) || detector.timeoutMs < 100 ||
+    detector.timeoutMs > 300_000
+  ) {
+    throw new Error("semanticDetector.timeoutMs must be between 100 ms and 5 minutes");
+  }
+  if (
+    !Number.isInteger(detector.maxInputBytes) || detector.maxInputBytes < 256 ||
+    detector.maxInputBytes > config.maxRequestBytes
+  ) {
+    throw new Error("semanticDetector.maxInputBytes must be between 256 and maxRequestBytes");
+  }
+  if (!(["degrade", "deny"] as const).includes(detector.onDetectorFailure)) {
+    throw new Error("semanticDetector.onDetectorFailure must be degrade or deny");
+  }
+  if (
+    detector.kinds.length === 0 || new Set(detector.kinds).size !== detector.kinds.length ||
+    detector.kinds.some((kind) => !SEMANTIC_FINDING_KINDS.includes(kind))
+  ) {
+    throw new Error("semanticDetector.kinds must contain unique semantic finding kinds");
+  }
+}
+
+function validateOptionalSemanticFields(config: SemanticDetectorConfig): void {
+  if (
+    config.providerId !== undefined && (typeof config.providerId !== "string" || !config.providerId)
+  ) {
+    throw new Error("semanticDetector.providerId must be a non-empty string");
+  }
+  if (config.model !== undefined && (typeof config.model !== "string" || !config.model)) {
+    throw new Error("semanticDetector.model must be a non-empty string");
+  }
+  if (config.kinds !== undefined && !Array.isArray(config.kinds)) {
+    throw new Error("semanticDetector.kinds must be an array");
   }
 }
 

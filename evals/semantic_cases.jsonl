@@ -1,0 +1,18 @@
+{"id":"semantic-name-001","scenario":"person name in a work request","prompt":"Send the revised briefing to Maya Chen before noon.","expectedKinds":["person_name"]}
+{"id":"semantic-name-002","scenario":"historical person name in context","prompt":"Ask Ada Lovelace to review the analytical notes.","expectedKinds":["person_name"]}
+{"id":"semantic-name-003","scenario":"person name with punctuation","prompt":"The accountable owner is Grace Hopper, pending reassignment.","expectedKinds":["person_name"]}
+{"id":"semantic-name-004","scenario":"person name in meeting note","prompt":"Ravi Narayanan will present the risk memo tomorrow.","expectedKinds":["person_name"]}
+{"id":"semantic-address-001","scenario":"street and city address","prompt":"Ship the prototype to 221B Baker Street, London by Friday.","expectedKinds":["physical_address"]}
+{"id":"semantic-address-002","scenario":"US postal address","prompt":"The signed copy should go to 1600 Amphitheatre Parkway, Mountain View, CA 94043.","expectedKinds":["physical_address"]}
+{"id":"semantic-address-003","scenario":"apartment address","prompt":"Update the record to 44 West Cedar Avenue, Apt 7C, Boston, MA 02114.","expectedKinds":["physical_address"]}
+{"id":"semantic-address-004","scenario":"Indian street address","prompt":"Deliver the packet to 12 Residency Road, Bengaluru 560025.","expectedKinds":["physical_address"]}
+{"id":"semantic-confidential-001","scenario":"unannounced acquisition intent","prompt":"The board approved the acquisition of Northstar before any public announcement.","expectedKinds":["semantic_confidential"]}
+{"id":"semantic-confidential-002","scenario":"unannounced workforce action","prompt":"Leadership will eliminate 120 roles next Tuesday before employees are notified.","expectedKinds":["semantic_confidential"]}
+{"id":"semantic-confidential-003","scenario":"unreleased financial result","prompt":"Unreleased quarterly revenue missed the internal forecast by eighteen percent.","expectedKinds":["semantic_confidential"]}
+{"id":"semantic-confidential-004","scenario":"undisclosed security incident","prompt":"The production signing key was exposed, and the incident has not been disclosed.","expectedKinds":["semantic_confidential"]}
+{"id":"semantic-negative-001","scenario":"programming language name","prompt":"Explain how the Ada programming language handles strong typing.","expectedKinds":[]}
+{"id":"semantic-negative-002","scenario":"public landmark discussion","prompt":"Summarize the literary history associated with Baker Street.","expectedKinds":[]}
+{"id":"semantic-negative-003","scenario":"generic confidentiality concept","prompt":"Compare confidential computing with ordinary encrypted storage.","expectedKinds":[]}
+{"id":"semantic-negative-004","scenario":"generic board governance","prompt":"Draft a public checklist for effective board meeting governance.","expectedKinds":[]}
+{"id":"semantic-negative-005","scenario":"ordinary revenue education","prompt":"Explain the difference between revenue and cash flow using a fictional example.","expectedKinds":[]}
+{"id":"semantic-negative-006","scenario":"generic mailing instruction","prompt":"Describe how postal routing works without using a real destination.","expectedKinds":[]}

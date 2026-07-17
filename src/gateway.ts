@@ -1,12 +1,14 @@
 import { InboundAuth } from "./auth.ts";
 import { inspectChat, transformChat } from "./chat.ts";
+import { resolveSemanticDetectorConfig } from "./config.ts";
 import { Metrics } from "./metrics.ts";
 import { decide } from "./policy.ts";
 import { invokeProvider, mapResponseContent, ProviderError } from "./providers.ts";
 import { ReceiptStore } from "./receipts.ts";
 import { recomposeOpenAiStream, RecompositionError } from "./streaming.ts";
 import { recomposeChecked } from "./surrogate.ts";
-import type { AppConfig, ChatRequest } from "./types.ts";
+import { createSemanticDetector, REFERENCE_SEMANTIC_DETECTOR_ID } from "./semantic.ts";
+import type { AppConfig, ChatRequest, ReceiptDetector } from "./types.ts";
 
 export class Gateway {
   readonly metrics = new Metrics();
@@ -18,6 +20,7 @@ export class Gateway {
   ) {}
 
   static async create(config: AppConfig): Promise<Gateway> {
+    createSemanticDetector(config);
     return new Gateway(
       config,
       await InboundAuth.fromEnvironment(),
@@ -72,8 +75,49 @@ export class Gateway {
       const originalJson = JSON.stringify(chat);
       const inspection = await inspectChat(chat, this.config);
       const findings = inspection.findings;
+      const detectorReceipt = this.recordDetectorEvidence(inspection);
+      const semantic = resolveSemanticDetectorConfig(this.config);
+      if (inspection.detectorDegraded && semantic.onDetectorFailure === "deny") {
+        this.metrics.denied++;
+        const receipt = await this.receipts.create({
+          requestCanonical: originalJson,
+          workloadId,
+          decision: "deny",
+          provider: null,
+          model: chat.model,
+          findings,
+          transformedFields: 0,
+          ...detectorReceipt,
+        });
+        return problem(
+          403,
+          "policy_denied",
+          "The required local semantic detector was unavailable.",
+          receipt.id,
+        );
+      }
       const requestedProvider = request.headers.get("x-egrysa-provider");
-      const policy = decide(findings, requestedProvider, this.config);
+      let policy = decide(findings, requestedProvider, this.config);
+      const untransformableTransformFindings = inspection.untransformableFindings.filter((
+        finding,
+      ) => this.config.policy.transformKinds.includes(finding.kind));
+      if (
+        policy.decision === "transform" && untransformableTransformFindings.length > 0 &&
+        untransformableTransformFindings.every((finding) =>
+          finding.precision !== undefined && finding.precision !== "high"
+        )
+      ) {
+        const localProvider = this.config.providers.find((provider) =>
+          provider.id === this.config.policy.localProvider && provider.local
+        ) ?? null;
+        policy = localProvider
+          ? {
+            decision: "local_only",
+            provider: localProvider,
+            reason: "untransformable semantic candidate routed to local inference",
+          }
+          : { decision: "deny", provider: null, reason: "local provider is not configured" };
+      }
       if (policy.decision === "deny" || !policy.provider) {
         this.metrics.denied++;
         const receipt = await this.receipts.create({
@@ -84,15 +128,14 @@ export class Gateway {
           model: chat.model,
           findings,
           transformedFields: 0,
+          ...detectorReceipt,
         });
         return problem(403, "policy_denied", policy.reason, receipt.id);
       }
 
       if (
         policy.decision === "transform" &&
-        inspection.untransformableFindings.some((finding) =>
-          this.config.policy.transformKinds.includes(finding.kind)
-        )
+        untransformableTransformFindings.length > 0
       ) {
         this.metrics.denied++;
         const receipt = await this.receipts.create({
@@ -103,6 +146,7 @@ export class Gateway {
           model: chat.model,
           findings,
           transformedFields: 0,
+          ...detectorReceipt,
         });
         return problem(
           403,
@@ -132,6 +176,7 @@ export class Gateway {
         model: chat.model,
         findings,
         transformedFields,
+        ...detectorReceipt,
       });
       receiptId = receipt.id;
       const invocation = await invokeProvider(
@@ -213,6 +258,43 @@ export class Gateway {
       }).map((id) => ({ id, object: "model", created: 0, owned_by: "egrysa" }))
     );
     return json({ object: "list", data });
+  }
+
+  private recordDetectorEvidence(
+    inspection: Awaited<ReturnType<typeof inspectChat>>,
+  ): { detectors?: ReceiptDetector[]; detectorDegraded?: boolean } {
+    const semanticEnabled = resolveSemanticDetectorConfig(this.config).enabled;
+    for (
+      const execution of inspection.detectorExecutions.filter((candidate) =>
+        candidate.id === REFERENCE_SEMANTIC_DETECTOR_ID
+      )
+    ) {
+      this.metrics.recordDetectorRun(
+        execution.latencyMs,
+        execution.failureClass,
+      );
+      if (execution.failureClass !== undefined) {
+        console.error(JSON.stringify({
+          level: "warn",
+          event: "detector_degraded",
+          detectorId: execution.id,
+          errorClass: execution.failureClass,
+        }));
+      }
+    }
+    if (!inspection.detectorDegraded) {
+      this.metrics.semanticFindings += inspection.findings.filter((finding) =>
+        finding.detectorId === REFERENCE_SEMANTIC_DETECTOR_ID
+      ).length;
+    }
+    if (!semanticEnabled) return {};
+    return {
+      detectors: inspection.detectorExecutions.map((execution) => ({
+        id: execution.id,
+        version: execution.version,
+      })),
+      detectorDegraded: inspection.detectorDegraded,
+    };
   }
 }
 

@@ -40,6 +40,9 @@ or cryptographically private access to arbitrary frontier-model APIs.
 
 ### 0.2A: semantic detector interface
 
+**Implementation status:** reference path complete; independent workflow labelling and adversarial
+evidence remain open.
+
 - Keep deterministic exact detectors as the fail-closed baseline.
 - Define a versioned local detector contract with bounded input, output schema, timeout, provenance,
   and confidence policy.

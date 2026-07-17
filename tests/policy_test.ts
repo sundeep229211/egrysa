@@ -26,3 +26,26 @@ Deno.test("policy transforms PII and fails closed on unclassified raw remote egr
     throw new Error("raw remote egress did not fail closed");
   }
 });
+
+Deno.test("low-precision blocked candidates route locally instead of denying", () => {
+  const candidate = {
+    ...finding("credit_card"),
+    precision: "low" as const,
+    confidence: 0.6,
+  };
+  const result = decide([candidate], "remote", testConfig());
+  if (result.decision !== "local_only" || result.provider?.id !== "local") {
+    throw new Error("low-precision blocked candidate was allowed to hard-deny or leave locally");
+  }
+});
+
+Deno.test("low-precision semantic findings retain their configured transform action", () => {
+  const candidate = {
+    ...finding("person_name"),
+    precision: "low" as const,
+    confidence: 0.7,
+  };
+  if (decide([candidate], null, testConfig()).decision !== "transform") {
+    throw new Error("semantic transform policy was not preserved");
+  }
+});

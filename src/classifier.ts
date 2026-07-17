@@ -1,4 +1,10 @@
-import { type LocalDetector, runDetector } from "./detectors.ts";
+import {
+  type DetectorErrorClass,
+  DetectorExecutionError,
+  type LocalDetector,
+  runDetectorDetailed,
+} from "./detectors.ts";
+import { createSemanticDetector, REFERENCE_SEMANTIC_DETECTOR_ID } from "./semantic.ts";
 import type { AppConfig, Finding, FindingKind } from "./types.ts";
 
 const patterns: Array<{ kind: FindingKind; regex: RegExp; validate?: (value: string) => boolean }> =
@@ -33,13 +39,73 @@ export async function classify(
   config: AppConfig,
   detectors: LocalDetector[] = createDetectors(config),
 ): Promise<Finding[]> {
-  const findings = (await Promise.all(detectors.map((detector) => runDetector(detector, text))))
-    .flat();
-  return removeOverlaps(findings);
+  return (await classifyDetailed(text, config, detectors)).findings;
+}
+
+export interface DetectorExecution {
+  id: string;
+  version: string;
+  latencyMs: number;
+  findings: number;
+  failureClass?: DetectorErrorClass;
+}
+
+export interface ClassificationResult {
+  findings: Finding[];
+  detectorExecutions: DetectorExecution[];
+  detectorDegraded: boolean;
+}
+
+export async function classifyDetailed(
+  text: string,
+  config: AppConfig,
+  detectors: LocalDetector[] = createDetectors(config),
+): Promise<ClassificationResult> {
+  const executions = await Promise.all(detectors.map(async (detector): Promise<
+    DetectorExecution & {
+      values: Finding[];
+    }
+  > => {
+    try {
+      const run = await runDetectorDetailed(detector, text);
+      return {
+        id: run.detectorId,
+        version: run.detectorVersion,
+        latencyMs: run.latencyMs,
+        findings: run.findings.length,
+        values: run.findings,
+      };
+    } catch (error) {
+      if (
+        error instanceof DetectorExecutionError &&
+        error.detectorId === REFERENCE_SEMANTIC_DETECTOR_ID
+      ) {
+        return {
+          id: error.detectorId,
+          version: error.detectorVersion,
+          latencyMs: error.latencyMs,
+          findings: 0,
+          failureClass: error.errorClass,
+          values: [],
+        };
+      }
+      throw error;
+    }
+  }));
+  const detectorDegraded = executions.some((execution) => execution.failureClass !== undefined);
+  const findings = executions.flatMap((execution) => execution.values).filter((finding) =>
+    !detectorDegraded || finding.detectorId !== REFERENCE_SEMANTIC_DETECTOR_ID
+  );
+  return {
+    findings: removeOverlaps(findings),
+    detectorExecutions: executions.map(({ values: _values, ...execution }) => execution),
+    detectorDegraded,
+  };
 }
 
 export function createDetectors(config: AppConfig): LocalDetector[] {
-  return [patternDetector(), sensitiveTermDetector(config)];
+  const semantic = createSemanticDetector(config);
+  return [patternDetector(), sensitiveTermDetector(config), ...(semantic ? [semantic] : [])];
 }
 
 function patternDetector(): LocalDetector {
@@ -108,7 +174,7 @@ function sensitiveTermDetector(config: AppConfig): LocalDetector {
   };
 }
 
-function removeOverlaps(findings: Finding[]): Finding[] {
+export function removeOverlaps(findings: Finding[]): Finding[] {
   const priority: FindingKind[] = [
     "private_key",
     "api_secret",
@@ -119,9 +185,13 @@ function removeOverlaps(findings: Finding[]): Finding[] {
     "phone",
     "ipv4",
     "confidential_term",
+    "person_name",
+    "physical_address",
+    "semantic_confidential",
   ];
   const sorted = findings.sort((a, b) =>
-    a.start - b.start || priority.indexOf(a.kind) - priority.indexOf(b.kind) || b.end - a.end
+    precisionPriority(a) - precisionPriority(b) || a.start - b.start ||
+    priority.indexOf(a.kind) - priority.indexOf(b.kind) || b.end - a.end
   );
   const kept: Finding[] = [];
   for (const candidate of sorted) {
@@ -129,7 +199,12 @@ function removeOverlaps(findings: Finding[]): Finding[] {
       kept.push(candidate);
     }
   }
-  return kept;
+  return kept.sort((a, b) => a.start - b.start || b.end - a.end);
+}
+
+function precisionPriority(finding: Finding): number {
+  if (finding.precision === undefined || finding.precision === "high") return 0;
+  return finding.precision === "medium" ? 1 : 2;
 }
 
 function digits(value: string): string {
