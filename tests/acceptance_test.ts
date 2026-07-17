@@ -1,5 +1,6 @@
 import { Gateway } from "../src/gateway.ts";
 import { verifyReceipt } from "../src/receipts.ts";
+import { SEMANTIC_PROMPT_VERSION } from "../src/semantic.ts";
 import { configureTestEnvironment } from "./environment.ts";
 import { testConfig } from "./fixtures.ts";
 
@@ -192,6 +193,76 @@ Deno.test("black-box compatibility and evidence acceptance", async () => {
   } finally {
     await provider.shutdown();
     await Deno.remove(receiptLogPath).catch(() => undefined);
+  }
+});
+
+Deno.test("local semantic detector transforms egress and emits verifiable attribution", async () => {
+  const keys = await configureTestEnvironment();
+  let resolvePort!: (port: number) => void;
+  const port = new Promise<number>((resolve) => resolvePort = resolve);
+  let providerBody = "";
+  const provider = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: ({ port }) => resolvePort(port),
+  }, async (request) => {
+    const body = await request.json() as Record<string, unknown>;
+    const messages = body.messages as Array<Record<string, unknown>>;
+    if (String(messages[0]?.content).includes(SEMANTIC_PROMPT_VERSION)) {
+      return completion(JSON.stringify({
+        findings: [{ kind: "person_name", text: "Ada Lovelace", confidence: 0.94 }],
+      }));
+    }
+    providerBody = JSON.stringify(body);
+    return completion(`Confirmed ${String(messages[0]?.content ?? "")}`);
+  });
+  try {
+    const config = testConfig();
+    config.providers[1]!.baseUrl = `http://127.0.0.1:${await port}/v1`;
+    config.policy.defaultProvider = "local";
+    config.semanticDetector!.enabled = true;
+    const gateway = await Gateway.create(config);
+    const response = await gateway.handle(
+      new Request("http://gateway/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer a-test-client-key-that-is-long-enough",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "approved-model",
+          messages: [{ role: "user", content: "Ask Ada Lovelace for an update." }],
+        }),
+      }),
+    );
+    const responseText = await response.text();
+    assert(response.status === 200, "semantic response status");
+    assert(!providerBody.includes("Ada Lovelace"), "semantic transformed egress");
+    assert(providerBody.includes("__EGRYSA_PERSON_NAME_"), "semantic surrogate egress");
+    assert(responseText.includes("Ada Lovelace"), "semantic local recomposition");
+    const receiptId = response.headers.get("x-egrysa-receipt");
+    assert(!!receiptId, "semantic receipt header");
+    const receipt = await (await gateway.handle(
+      new Request(`http://gateway/v1/receipts/${receiptId}`, { headers: authHeaders() }),
+    )).json();
+    assert(receipt.version === "3", "semantic receipt version");
+    assert(receipt.decision === "transform", "semantic receipt decision");
+    assert(receipt.findingCounts.person_name === 1, "semantic receipt finding count");
+    assert(receipt.detectorDegraded === false, "semantic receipt degradation");
+    assert(
+      receipt.detectors.some((item: Record<string, unknown>) =>
+        item.id === "egrysa.reference.local-semantic" && item.version === "0.2.0"
+      ),
+      "semantic receipt attribution",
+    );
+    assert(await verifyReceipt(receipt, keys.publicKey), "semantic receipt verification");
+    assert(!JSON.stringify(receipt).includes("Ada Lovelace"), "semantic receipt content minimum");
+    assert(
+      gateway.metrics.render().includes("egrysa_semantic_findings_total 1"),
+      "semantic findings metric",
+    );
+  } finally {
+    await provider.shutdown();
   }
 });
 

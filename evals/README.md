@@ -6,7 +6,13 @@ policy decision. Fixtures must never contain customer prompts or live credential
 
 `deno task eval` reports case accuracy, decision accuracy, per-class precision and recall,
 false-positive cases, high-severity routing failures, transformation leakage, deterministic
-round-trip fidelity, and local classifier/policy time.
+round-trip fidelity, local classifier/policy time, and an offline semantic report from
+`semantic_cases.jsonl` using the deterministic CI stub.
+
+`semantic_cases.jsonl` is a separate 18-case semantic suite: four labelled positives for each
+reference semantic kind and six negatives. `deno task eval:semantic` runs the same cases against the
+enabled customer-local model selected by `EGRYSA_CONFIG`; it is evidence-only and does not gate
+release recall.
 
 Contribution rules:
 

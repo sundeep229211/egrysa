@@ -1,4 +1,4 @@
-import { classify } from "../src/classifier.ts";
+import { classify, removeOverlaps } from "../src/classifier.ts";
 import { testConfig } from "./fixtures.ts";
 
 Deno.test("classifier detects transformable, blocked, and confidential data", async () => {
@@ -35,5 +35,31 @@ Deno.test("classifier does not treat ordinary nine-digit identifiers as SSNs", a
   const ssn = await classify("SSN 123-45-6789", testConfig());
   if (!ssn.some((finding) => finding.kind === "ssn")) {
     throw new Error("a canonical SSN was missed");
+  }
+});
+
+Deno.test("deterministic findings win overlaps against semantic candidates", () => {
+  const findings = removeOverlaps([
+    {
+      kind: "person_name",
+      start: 0,
+      end: 24,
+      value: "Contact alex@example.com",
+      precision: "low",
+      confidence: 0.7,
+      detectorId: "egrysa.reference.local-semantic",
+    },
+    {
+      kind: "email",
+      start: 8,
+      end: 24,
+      value: "alex@example.com",
+      precision: "high",
+      confidence: 1,
+      detectorId: "egrysa.deterministic.patterns",
+    },
+  ]);
+  if (findings.length !== 1 || findings[0]?.kind !== "email") {
+    throw new Error("semantic overlap displaced a deterministic finding");
   }
 });

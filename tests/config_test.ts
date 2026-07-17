@@ -1,4 +1,4 @@
-import { validateConfig } from "../src/config.ts";
+import { resolveSemanticDetectorConfig, validateConfig } from "../src/config.ts";
 import type { AppConfig } from "../src/types.ts";
 import containerConfig from "../config/egrysa.container.json" with { type: "json" };
 import exampleConfig from "../config/egrysa.example.json" with { type: "json" };
@@ -48,6 +48,37 @@ Deno.test("configuration cannot label a remote endpoint as local", () => {
     () => validateConfig(wrongReference),
     "localProvider must reference a provider inside the local trust boundary",
   );
+});
+
+Deno.test("configuration rejects a remote semantic detector endpoint at startup", () => {
+  const config = testConfig();
+  config.semanticDetector!.enabled = true;
+  config.semanticDetector!.providerId = "remote";
+  config.semanticDetector!.model = "approved-model";
+  assertThrows(
+    () => validateConfig(config),
+    "semanticDetector.providerId must reference a local provider",
+  );
+});
+
+Deno.test("semantic detector defaults are bounded and degradation-first", () => {
+  const config = testConfig();
+  delete config.semanticDetector!.timeoutMs;
+  delete config.semanticDetector!.maxInputBytes;
+  delete config.semanticDetector!.onDetectorFailure;
+  validateConfig(config);
+  const detector = resolveSemanticDetectorConfig(config);
+  if (
+    detector.timeoutMs !== 2_000 || detector.maxInputBytes !== 16_384 ||
+    detector.onDetectorFailure !== "degrade"
+  ) throw new Error("semantic detector defaults changed");
+
+  const absent = testConfig();
+  delete absent.semanticDetector;
+  validateConfig(absent);
+  if (resolveSemanticDetectorConfig(absent).enabled) {
+    throw new Error("semantic detector was not off by default");
+  }
 });
 
 function assertThrows(action: () => void, expected: string): void {

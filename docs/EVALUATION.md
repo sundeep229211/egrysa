@@ -1,8 +1,8 @@
 # Evaluation record
 
-Date: 2026-07-15
+Date: 2026-07-17
 
-Runtime: Deno 2.9.2, Apple Silicon
+Runtime: Deno 2.9.3 on Apple Silicon; CI remains pinned to Deno 2.9.2
 
 Suite: `egrysa-synthetic-v2`
 
@@ -10,8 +10,8 @@ Suite: `egrysa-synthetic-v2`
 
 | Gate                                          |                                               Result |
 | --------------------------------------------- | ---------------------------------------------------: |
-| Unit/integration tests                        |                                  24 passed, 0 failed |
-| Black-box compatibility acceptance            |                                   1 passed, 0 failed |
+| Unit/integration tests                        |                                  41 passed, 0 failed |
+| Black-box compatibility acceptance            |                                   2 passed, 0 failed |
 | Expected data-class decisions                 |                                                48/48 |
 | Exact expected finding sets                   |                                                48/48 |
 | Macro detector precision / recall             |                                          1.00 / 1.00 |
@@ -32,6 +32,48 @@ Suite: `egrysa-synthetic-v2`
 | Ollama local generation through Egrysa        | passed with `local_only` decision and signed receipt |
 | OpenAI provider-adapter generation            |           passed one authorized `gpt-5.2` smoke test |
 
+## Reference semantic detector evidence
+
+`evals/semantic_cases.jsonl` contains 18 implementation-authored cases: four person-name positives,
+four physical-address positives, four semantically confidential organizational positives, and six
+negative cases. The evaluator compares finding kinds per case and reports per-kind precision/recall,
+negative-case false-positive rate, detector failures, and p95 added latency. Candidate strings are
+synthetic and the harness does not persist prompts.
+
+The normal `deno task eval` path uses `egrysa.eval.semantic-stub@1.0.0`, a deterministic offline
+detector that keeps CI reproducible and exercises semantic policy/evaluation accounting without
+starting a model:
+
+| Offline semantic metric                  |   Result |
+| ---------------------------------------- | -------: |
+| Cases                                    |       18 |
+| Person-name precision / recall           |    1 / 1 |
+| Physical-address precision / recall      |    1 / 1 |
+| Semantic-confidential precision / recall |    1 / 1 |
+| Negative-case false-positive rate        |        0 |
+| p95 added latency                        | < 0.1 ms |
+| Detector failures                        |        0 |
+
+A separate live run used the reference detector `egrysa.reference.local-semantic@0.2.0`, Ollama
+`0.32.1`, and the locally installed `gpt-oss:20b` artifact ID `17052f91a42e` on an Apple M4 Pro. The
+detector endpoint was loopback-only and no fixture left the host:
+
+| Live semantic metric                     |        Result |
+| ---------------------------------------- | ------------: |
+| Cases                                    |            18 |
+| Person-name precision / recall           |   1.00 / 1.00 |
+| Physical-address precision / recall      |   0.80 / 1.00 |
+| Semantic-confidential precision / recall |   1.00 / 1.00 |
+| Macro precision / recall                 | 0.9333 / 1.00 |
+| Negative-case false-positive rate        |        0.1667 |
+| p95 added latency                        |  11,945.98 ms |
+| Detector failures                        |             0 |
+
+These are reference measurements, not a release recall gate or a claim about other hardware,
+prompts, quantizations, model versions, or organizations. The physical-address false positive and
+interactive latency demonstrate why semantic findings remain low precision, off by default, and
+unable to hard-deny a request by themselves.
+
 ## Runtime evidence
 
 The standalone compile, unit/integration suite, synthetic-v2 results, container, vulnerability scan,
@@ -41,8 +83,8 @@ version.
 
 The black-box acceptance task passed model discovery, non-streaming and split-token streaming
 recomposition, function tools, mutated-surrogate failure, provider timeout, stream cancellation,
-workload attribution, public receipt verification, checkpoint retrieval, and restart continuity
-against a local mock provider.
+workload attribution, public receipt verification, checkpoint retrieval, restart continuity, and the
+local semantic transform/receipt path against local mock providers.
 
 The current container image digest is
 `sha256:427e35f654c94881eddf6ee2674825697f6e2917ade569b6648786bc3a30efbb`. It listened through its
@@ -90,9 +132,10 @@ deletion behavior.
 ## Interpretation
 
 These results prove that the current deterministic paths behave as expected on a 48-case synthetic
-corpus containing positive, mixed, and false-positive fixtures. They do not establish real-world
-recall, semantic privacy, model quality, throughput, availability, or regulatory compliance. The
-corpus remains implementation-authored rather than independently labelled.
+corpus and that the reference local semantic path operates against both a deterministic CI stub and
+one measured local model. They do not establish real-world recall, semantic privacy, model quality,
+throughput, availability, or regulatory compliance. Both corpora remain implementation-authored
+rather than independently labelled.
 
 ## Required independent evaluation
 
@@ -108,8 +151,10 @@ Run locally with:
 deno task check
 deno task eval
 deno task acceptance
+EGRYSA_CONFIG=config/<enabled-local-config>.json deno task eval:semantic
 EGRYSA_LIVE_TEST=1 deno task smoke
 ```
 
-The live generation test is deliberately separate so CI never spends provider quota or sends
-fixtures externally.
+The live semantic and provider-generation tests are deliberately separate. CI uses only the
+deterministic semantic stub, never spends provider quota, and never sends semantic fixtures to a
+model endpoint.

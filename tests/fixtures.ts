@@ -26,12 +26,21 @@ export function testConfig(): AppConfig {
         dataPolicy: { training: "unknown", retention: "none", allowRaw: true },
       },
     ],
+    semanticDetector: {
+      enabled: false,
+      providerId: "local",
+      model: "approved-model",
+      timeoutMs: 2_000,
+      maxInputBytes: 16_384,
+      onDetectorFailure: "degrade",
+      kinds: ["person_name", "physical_address", "semantic_confidential"],
+    },
     policy: {
       defaultProvider: "remote",
       localProvider: "local",
       blockKinds: ["credit_card", "private_key", "api_secret", "ssn"],
-      localOnlyKinds: ["confidential_term"],
-      transformKinds: ["email", "phone", "ipv4", "iban"],
+      localOnlyKinds: ["confidential_term", "semantic_confidential"],
+      transformKinds: ["email", "phone", "ipv4", "iban", "person_name", "physical_address"],
       sensitiveTerms: [{ term: "Project Nightingale", label: "initiative" }],
     },
   };

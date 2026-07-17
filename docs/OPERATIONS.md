@@ -37,6 +37,77 @@ When an environment file generated for host development is reused with a contain
 `EGRYSA_CONFIG=/app/config/egrysa.container.json` after `--env-file`; otherwise the host-relative
 receipt path overrides the image default.
 
+## Reference local semantic detector
+
+The semantic detector is off by default. It may reference only an OpenAI-compatible provider with
+`local:true`; current provider validation limits that endpoint to loopback HTTP/HTTPS. Startup fails
+if the provider is missing, remote, Anthropic-shaped, or does not allow the configured detector
+model. There is no remote fallback.
+
+For a host evaluation with Ollama:
+
+```sh
+ollama pull gpt-oss:20b
+ollama serve
+```
+
+Keep the local provider model allowlist and detector block aligned, then enable it:
+
+```json
+{
+  "semanticDetector": {
+    "enabled": true,
+    "providerId": "local",
+    "model": "gpt-oss:20b",
+    "timeoutMs": 2000,
+    "maxInputBytes": 16384,
+    "onDetectorFailure": "degrade",
+    "kinds": ["person_name", "physical_address", "semantic_confidential"]
+  }
+}
+```
+
+Put `person_name` and `physical_address` in `transformKinds`, and `semantic_confidential` in
+`localOnlyKinds`, as the shipped examples do. Do not put semantic-only kinds in `blockKinds`: model
+findings are deliberately low precision. Even if a future detector emits a low-precision candidate
+for a blocked kind, policy routes it locally instead of allowing it to hard-deny traffic.
+
+`maxInputBytes` is a per-model-call bound. Larger text surfaces are split on whitespace with at
+least 64 bytes of overlap, so size local inference for the number of text surfaces and chunks in a
+request. The measured `gpt-oss:20b` reference run on an Apple M4 Pro had 11.95 seconds p95 added
+latency across short prompts; the default two-second deadline is therefore an alpha safety bound,
+not a universal sizing recommendation. Measure the chosen model and hardware before enabling the
+detector on interactive traffic.
+
+On timeout, connection failure, invalid schema, or a bounded-input/response failure, Egrysa drops
+all semantic findings for that request. `onDetectorFailure:"degrade"` continues using only the
+deterministic floor and writes `detectorDegraded:true` to the signed receipt. High-assurance
+deployments should use `"deny"`, which stops the request and still emits the degraded receipt.
+
+Monitor these content-free metrics:
+
+- `egrysa_detector_failures_total` and `egrysa_detector_timeouts_total`;
+- `egrysa_semantic_findings_total` after overlap resolution;
+- `egrysa_detector_latency_ms_count`, `_sum`, `_min`, `_mean`, and `_max`.
+
+Failure logs contain only `event`, detector ID, and error class. Receipts contain only detector
+IDs/versions and the degradation boolean; neither channel contains candidate text or source input.
+
+For a live local demo, set `policy.defaultProvider` to `local`, start Egrysa, and send a request
+that uses the local model:
+
+```sh
+curl http://127.0.0.1:8787/v1/chat/completions \
+  -H "Authorization: Bearer $EGRYSA_CLIENT_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-oss:20b","messages":[{"role":"user","content":"Ask Ada Lovelace for an update."}]}'
+```
+
+The inference request receives a request-scoped `__EGRYSA_PERSON_NAME_...__` surrogate, the client
+response is recomposed to `Ada Lovelace`, and the version-3 receipt identifies
+`egrysa.reference.local-semantic@0.2.0`. Run `deno task eval:semantic` with an enabled config to
+measure the local model without making live recall a release gate.
+
 ## Deployment sequence
 
 1. Fork and protect `main`; require review, CI, signed commits/tags according to company policy.

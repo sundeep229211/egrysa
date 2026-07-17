@@ -12,17 +12,27 @@ export function decide(
   config: AppConfig,
 ): PolicyResult {
   const kinds = new Set(findings.map((finding) => finding.kind));
-  if (intersects(kinds, config.policy.blockKinds)) {
+  const highPrecisionBlocked = findings.some((finding) =>
+    config.policy.blockKinds.includes(finding.kind) &&
+    (finding.precision === undefined || finding.precision === "high")
+  );
+  if (highPrecisionBlocked) {
     return { decision: "deny", provider: null, reason: "blocked data class detected" };
   }
 
-  const providerId = intersects(kinds, config.policy.localOnlyKinds)
+  const lowPrecisionBlocked = findings.some((finding) =>
+    config.policy.blockKinds.includes(finding.kind) && finding.precision !== undefined &&
+    finding.precision !== "high"
+  );
+  const localRouteRequired = lowPrecisionBlocked || intersects(kinds, config.policy.localOnlyKinds);
+
+  const providerId = localRouteRequired
     ? config.policy.localProvider
     : (requestedProvider ?? config.policy.defaultProvider);
   const provider = config.providers.find((candidate) => candidate.id === providerId) ?? null;
   if (!provider) return { decision: "deny", provider: null, reason: "provider is not configured" };
 
-  if (intersects(kinds, config.policy.localOnlyKinds)) {
+  if (localRouteRequired) {
     if (!provider.local) {
       return {
         decision: "deny",
@@ -33,7 +43,9 @@ export function decide(
     return {
       decision: "local_only",
       provider,
-      reason: "confidential data routed to local inference",
+      reason: lowPrecisionBlocked
+        ? "candidate blocked data routed to local inference"
+        : "confidential data routed to local inference",
     };
   }
 
