@@ -36,8 +36,8 @@ training settings are policy inputs that must be validated through contract and 
 - SSE streaming for OpenAI-compatible providers with bounded holdback recomposition.
 - Function-tool definitions, assistant tool calls, and tool results as inspected text surfaces;
   Egrysa does not execute tools.
-- Deterministic detection for emails, phones, IP addresses, IBANs, payment cards, US SSNs, private
-  keys, common API secrets, and configured confidential terms.
+- Deterministic detection for emails, phones, IP addresses, IBANs, payment cards, hyphenated US
+  SSNs, private keys, common API secrets, and configured confidential terms.
 - Four decisions: `deny`, `local_only`, `transform`, and explicitly approved `allow_raw`.
 - Request-scoped, consistent surrogate replacement and local response recomposition.
 - OpenAI, Anthropic, and local OpenAI-compatible provider adapters.
@@ -63,6 +63,8 @@ training settings are policy inputs that must be validated through contract and 
 - No claim that a natural-language “forget” instruction changes provider retention. Contractual
   controls and supported API parameters are used instead.
 - No transparent employee identity header is forwarded to providers.
+- Contiguous nine-digit values are not classified as SSNs. Deny-class SSN detection requires the
+  canonical hyphenated form to avoid blocking ordinary identifiers.
 
 ## Why open source first
 

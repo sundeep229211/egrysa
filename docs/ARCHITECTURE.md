@@ -50,6 +50,9 @@ flowchart TB
 - Receipts contain workload attribution, a keyed nonce-bound request fingerprint, finding counts,
   decision, provider/model identifiers, and chain/signature values only. They contain no raw prompt
   or response content.
+- Receipts are created after policy selection and before provider invocation. They evidence the
+  decision and intended provider/model, not successful upstream delivery; a provider rejection or
+  timeout can leave a valid receipt.
 - Provider credentials are read from named environment variables and never accepted in request
   bodies.
 - Remote providers require HTTPS; plaintext HTTP is limited to loopback providers explicitly marked

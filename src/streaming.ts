@@ -35,13 +35,25 @@ export function recomposeOpenAiStream(
             if (!boundary) break;
             const frame = input.slice(0, boundary.index);
             input = input.slice(boundary.index + boundary.length);
-            const event = processFrame(frame, states, mapping, (value) => template = value);
+            const event = processFrame(
+              frame,
+              states,
+              mapping,
+              template,
+              (value) => template = value,
+            );
             if (event) output.push(event);
           }
           if (!done) continue;
           upstreamDone = true;
           if (input.trim()) {
-            const event = processFrame(input, states, mapping, (value) => template = value);
+            const event = processFrame(
+              input,
+              states,
+              mapping,
+              template,
+              (value) => template = value,
+            );
             if (event) output.push(event);
           }
           const tail = flushAll(states, template);
@@ -93,6 +105,7 @@ class BufferedRecomposer {
     this.#replaceKnown();
     if (this.#buffer.length <= this.#holdback) return "";
     const cut = this.#buffer.length - this.#holdback;
+    this.#assertNoSurrogatePrefixBefore(cut);
     const output = this.#buffer.slice(0, cut);
     this.#buffer = this.#buffer.slice(cut);
     return output;
@@ -101,6 +114,7 @@ class BufferedRecomposer {
   flush(): string {
     this.#assertSafe(true);
     this.#replaceKnown();
+    this.#assertNoSurrogatePrefixBefore(Number.POSITIVE_INFINITY);
     const output = this.#buffer;
     this.#buffer = "";
     return output;
@@ -117,19 +131,33 @@ class BufferedRecomposer {
       this.#buffer = this.#buffer.replaceAll(token, original);
     }
   }
+
+  #assertNoSurrogatePrefixBefore(boundary: number): void {
+    if (this.mapping.size === 0) return;
+    let audit = this.#buffer;
+    for (const original of this.mapping.values()) {
+      if (original) audit = audit.replaceAll(original, "\0".repeat(original.length));
+    }
+    for (const match of audit.matchAll(/_+egrysa[_-]/gi)) {
+      if ((match.index ?? Number.POSITIVE_INFINITY) < boundary) {
+        throw new RecompositionError("provider damaged a surrogate token");
+      }
+    }
+  }
 }
 
 function processFrame(
   frame: string,
   states: Map<string, BufferedRecomposer>,
   mapping: ReadonlyMap<string, string>,
+  template: Record<string, unknown> | null,
   setTemplate: (value: Record<string, unknown>) => void,
 ): string {
   const data = frame.split(/\r?\n/).filter((line) => line.startsWith("data:"))
     .map((line) => line.slice(5).trimStart()).join("\n");
   if (!data) return "";
   if (data === "[DONE]") {
-    const tail = flushAll(states, null);
+    const tail = flushAll(states, template);
     return `${tail ? `data: ${JSON.stringify(tail)}\n\n` : ""}data: [DONE]\n\n`;
   }
   let parsed: unknown;
