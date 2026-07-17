@@ -21,6 +21,12 @@ retention policy. Run one replica until a consistency-aware sequencing backend e
 the software signing key can rewrite unanchored history, so retain signed checkpoints outside the
 gateway.
 
+If the active receipt path is missing or empty while sequence-suffixed archives exist, startup fails
+with an interrupted-rotation error. Do not delete the archives or start the same chain at
+sequence 1. Inspect the newest archive and externally retained checkpoint, then either rename the
+newest archive back to the configured active path or explicitly start a new chain with both a new
+`receiptChainId` and a new empty log path.
+
 ## Container boundary
 
 The image sets `EGRYSA_CONFIG=/app/config/egrysa.container.json`. That configuration matches the
@@ -40,6 +46,43 @@ volume will fail closed on the first receipt append.
 When an environment file generated for host development is reused with a container, pin
 `EGRYSA_CONFIG=/app/config/egrysa.container.json` after `--env-file`; otherwise the host-relative
 receipt path overrides the image default.
+
+## Provider capabilities and disclosed downgrade
+
+Every adapter has a reviewed default profile in `src/provider_capabilities.ts`. A provider config
+may narrow that profile for a locked-down or partial OpenAI-compatible server:
+
+```json
+{
+  "capabilities": {
+    "seed": false,
+    "parallel_tool_calls": false
+  }
+}
+```
+
+Only known boolean keys are accepted, and an override cannot enable a feature the adapter does not
+implement. Unsupported `seed`, `top_p`, frequency/presence penalties, and `parallel_tool_calls` are
+removed from a cloned provider request. The response then carries `x-egrysa-downgraded` with a
+comma-separated list such as `seed,top_p`; absence of the header means no configured capability
+downgrade occurred.
+
+Features that change the response contract are not silently removed. Unsupported tools, required
+tool choice, streaming, stream usage options, temperature, or output-token bounds return a 422
+problem naming the capability before provider contact. Anthropic streaming is supported through a
+buffered OpenAI-SSE emulation and always discloses `stream-emulated`. If usage was requested through
+`stream_options.include_usage`, the emulation emits an OpenAI-shaped usage frame.
+
+## Provider conformance workflow
+
+Run `deno task conformance -- --provider <id>` after configuring and starting a provider. Deno asks
+for network permission to only that provider host and, when needed, access to only its credential
+environment variable. Deterministic wire failures produce a non-zero exit code and a dated JSON
+report under `evals/conformance/`; surrogate fidelity is informational. See
+[Provider conformance](CONFORMANCE.md) for the check definitions and contributor submission steps.
+
+After adding a report, run `deno task conformance:matrix` to regenerate the README support matrix
+from the capability table and committed evidence.
 
 ## Reference local semantic detector
 

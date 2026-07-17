@@ -1,4 +1,5 @@
 import type { ChatMessage, ChatRequest, ProviderConfig, ToolCall } from "./types.ts";
+import { prepareProviderRequest, ProviderCapabilityError } from "./provider_capabilities.ts";
 
 export class ProviderError extends Error {
   constructor(message: string, readonly status = 502) {
@@ -7,6 +8,10 @@ export class ProviderError extends Error {
 }
 
 export type ProviderInvocation =
+  | { type: "json"; data: Record<string, unknown>; downgraded: string[] }
+  | { type: "stream"; response: Response; complete: () => void; downgraded: string[] };
+
+type AdapterInvocation =
   | { type: "json"; data: Record<string, unknown> }
   | { type: "stream"; response: Response; complete: () => void };
 
@@ -18,23 +23,40 @@ export async function invokeProvider(
   if (!provider.allowedModels.includes(request.model)) {
     throw new ProviderError("model is not approved for this provider", 403);
   }
+  let prepared;
+  try {
+    prepared = prepareProviderRequest(provider, request);
+  } catch (error) {
+    if (error instanceof ProviderCapabilityError) throw new ProviderError(error.message, 422);
+    throw error;
+  }
+  const effectiveRequest = prepared.request;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    if (request.stream && provider.kind === "anthropic") {
-      throw new ProviderError("streaming is not supported by the Anthropic adapter", 422);
-    }
     if (provider.kind === "anthropic") {
-      const data = await invokeAnthropic(provider, request, controller.signal);
+      const data = await invokeAnthropic(provider, effectiveRequest, controller.signal);
       clearTimeout(timeout);
-      return { type: "json", data };
+      if (effectiveRequest.stream) {
+        return {
+          type: "stream",
+          response: emulateOpenAiStream(data, effectiveRequest.stream_options?.include_usage),
+          complete: () => undefined,
+          downgraded: prepared.downgraded,
+        };
+      }
+      return { type: "json", data, downgraded: prepared.downgraded };
     }
-    const invocation = await invokeOpenAiCompatible(provider, request, controller.signal);
+    const invocation = await invokeOpenAiCompatible(provider, effectiveRequest, controller.signal);
     if (invocation.type === "stream") {
-      return { ...invocation, complete: () => clearTimeout(timeout) };
+      return {
+        ...invocation,
+        complete: () => clearTimeout(timeout),
+        downgraded: prepared.downgraded,
+      };
     }
     clearTimeout(timeout);
-    return invocation;
+    return { ...invocation, downgraded: prepared.downgraded };
   } catch (error) {
     clearTimeout(timeout);
     throw error;
@@ -45,7 +67,7 @@ async function invokeOpenAiCompatible(
   provider: ProviderConfig,
   request: ChatRequest,
   signal: AbortSignal,
-): Promise<ProviderInvocation> {
+): Promise<AdapterInvocation> {
   const headers = new Headers({ "content-type": "application/json" });
   const key = provider.apiKeyEnv ? Deno.env.get(provider.apiKeyEnv) : undefined;
   if (!provider.local && !key) {
@@ -143,6 +165,81 @@ async function invokeAnthropic(
     }],
     usage: raw.usage ?? {},
   };
+}
+
+export function emulateOpenAiStream(
+  completion: Record<string, unknown>,
+  includeUsage = false,
+): Response {
+  const choice = Array.isArray(completion.choices) && completion.choices[0] &&
+      typeof completion.choices[0] === "object"
+    ? completion.choices[0] as Record<string, unknown>
+    : {};
+  const message = choice.message && typeof choice.message === "object" &&
+      !Array.isArray(choice.message)
+    ? choice.message as Record<string, unknown>
+    : {};
+  const id = typeof completion.id === "string" ? completion.id : `egrysa-${crypto.randomUUID()}`;
+  const model = typeof completion.model === "string" ? completion.model : "unknown";
+  const created = typeof completion.created === "number"
+    ? completion.created
+    : Math.floor(Date.now() / 1000);
+  const base = { id, object: "chat.completion.chunk", created, model };
+  const delta: Record<string, unknown> = { role: "assistant" };
+  if (typeof message.content === "string") delta.content = message.content;
+  if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+    delta.tool_calls = message.tool_calls.map((call, index) => {
+      const typed = call && typeof call === "object" && !Array.isArray(call)
+        ? call as Record<string, unknown>
+        : {};
+      const fn = typed.function && typeof typed.function === "object" &&
+          !Array.isArray(typed.function)
+        ? typed.function as Record<string, unknown>
+        : {};
+      return {
+        index,
+        id: typeof typed.id === "string" ? typed.id : `call_${index}`,
+        type: "function",
+        function: {
+          name: typeof fn.name === "string" ? fn.name : "unknown",
+          arguments: typeof fn.arguments === "string" ? fn.arguments : "{}",
+        },
+      };
+    });
+  }
+  const frames: Record<string, unknown>[] = [
+    { ...base, choices: [{ index: 0, delta, finish_reason: null }] },
+    {
+      ...base,
+      choices: [{
+        index: 0,
+        delta: {},
+        finish_reason: typeof choice.finish_reason === "string" ? choice.finish_reason : "stop",
+      }],
+    },
+  ];
+  if (includeUsage) frames.push({ ...base, choices: [], usage: openAiUsage(completion.usage) });
+  const body = `${
+    frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join("")
+  }data: [DONE]\n\n`;
+  return new Response(body, { headers: { "content-type": "text/event-stream; charset=utf-8" } });
+}
+
+function openAiUsage(value: unknown): Record<string, number> {
+  const usage = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const prompt = numericUsage(usage.prompt_tokens ?? usage.input_tokens);
+  const completion = numericUsage(usage.completion_tokens ?? usage.output_tokens);
+  return {
+    prompt_tokens: prompt,
+    completion_tokens: completion,
+    total_tokens: numericUsage(usage.total_tokens) || prompt + completion,
+  };
+}
+
+function numericUsage(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
 function sanitizeOpenAiRequest(request: ChatRequest): Record<string, unknown> {

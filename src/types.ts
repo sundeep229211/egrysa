@@ -42,6 +42,24 @@ export interface DataPolicy {
   allowRaw: boolean;
 }
 
+export const PROVIDER_CAPABILITY_KEYS = [
+  "temperature",
+  "max_tokens",
+  "seed",
+  "top_p",
+  "frequency_penalty",
+  "presence_penalty",
+  "tools",
+  "tool_choice",
+  "parallel_tool_calls",
+  "stream",
+  "stream_options",
+] as const;
+
+export type ProviderCapabilityKey = typeof PROVIDER_CAPABILITY_KEYS[number];
+export type ProviderCapabilities = Record<ProviderCapabilityKey, boolean>;
+export type ProviderCapabilityOverrides = Partial<Record<ProviderCapabilityKey, boolean>>;
+
 export interface ProviderConfig {
   id: string;
   kind: "openai" | "anthropic" | "openai-compatible";
@@ -49,6 +67,7 @@ export interface ProviderConfig {
   apiKeyEnv?: string;
   allowedModels: string[];
   local?: boolean;
+  capabilities?: ProviderCapabilityOverrides;
   dataPolicy: DataPolicy;
 }
 

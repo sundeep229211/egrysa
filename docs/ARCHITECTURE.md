@@ -34,6 +34,28 @@ flowchart TB
     INF --> E
 ```
 
+## Capability-aware provider adaptation
+
+```mermaid
+flowchart LR
+    R["Validated ChatRequest"] --> C["Resolve adapter capabilities + provider override"]
+    C -->|"unsupported semantic feature"| X["422 named capability"]
+    C -->|"unsupported droppable tuning"| F["Remove field from cloned request"]
+    C -->|"supported"| A["Provider adapter"]
+    F --> A
+    A -->|"native JSON / SSE"| O["OpenAI-compatible response surface"]
+    A -->|"Anthropic buffered response"| E["OpenAI SSE emulation"]
+    E --> O
+    F --> H["x-egrysa-downgraded"]
+    E --> H
+```
+
+The default profiles live in `src/provider_capabilities.ts`; configuration can only narrow them.
+Droppable tuning fields are removed before adapter serialization and named in a response header.
+Tools, tool choice, streaming, stream options, temperature, and output bounds fail with 422 when the
+selected profile cannot preserve their semantics. Anthropic streaming is intentionally buffered,
+then emitted as stable OpenAI chunk frames and disclosed as `stream-emulated`.
+
 ## Control matrix
 
 | Point            | Customer control                           | Egrysa control                                                         | Not controlled here                                             |
@@ -41,7 +63,7 @@ flowchart TB
 | User input       | Endpoint, identity, acceptable-use policy  | API authentication and supported shape                                 | Copy/paste before the gateway                                   |
 | Pre-egress       | Network placement and taxonomy             | deterministic classify; optional local semantic candidates; policy     | Unknown entities and semantic model misses                      |
 | Egress           | DNS, firewall, proxy, private connectivity | fixed provider URL, HTTPS, no redirect, model allowlist                | Public internet routing and provider edge                       |
-| Provider request | Contract, project, region, entitlements    | strips unsupported fields; forces `store:false` for OpenAI-style calls | Provider safety review, legal holds, metadata, internal systems |
+| Provider request | Contract, project, region, entitlements    | capability gate; disclosed tuning drops; `store:false` where supported | Provider safety review, legal holds, metadata, internal systems |
 | Inference        | provider/model choice                      | approved provider and model only                                       | weights, caches, internal routing, model behavior               |
 | Response         | application UX                             | buffered or SSE holdback recomposition and minimized receipt           | Provider-generated sensitive text not tied to a surrogate       |
 | Evidence         | storage, external checkpoint retention     | durable single-writer JSONL chain and Ed25519 signatures               | A signer with the private key can rewrite unanchored history    |
@@ -65,8 +87,8 @@ flowchart TB
 - Remote providers require HTTPS; plaintext HTTP is limited to loopback providers explicitly marked
   local.
 - OpenAI-compatible upstream payloads use an allowlist of fields and force `store:false`.
-- Streaming SSE content and tool-call argument fragments use bounded local recomposition. Anthropic
-  streaming and multimodal content fail closed.
+- Native and emulated SSE content and tool-call argument fragments use bounded local recomposition.
+  Anthropic emulation is not incremental; multimodal content still fails closed.
 - Recomposition treats token-shaped, case-insensitive `EGRYSA_...` fragments as suspected damage
   even when a provider removes all leading underscores. This intentionally favors failing closed;
   ordinary prose such as “Egrysa is a gateway” lacks the separator/body shape and is not residue.
@@ -77,6 +99,8 @@ flowchart TB
   literally in the inspected source. Deterministic findings win every overlap.
 - Semantic findings are low precision. High-precision deterministic findings remain the only
   finding-based path to a hard deny; low-precision candidates transform or route locally.
+- Receipt startup refuses a missing or empty active head when sequence-suffixed rotated logs exist,
+  preventing an interrupted rotation from silently creating a duplicate sequence space.
 
 ## Known engineering limits
 

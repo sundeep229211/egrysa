@@ -2,11 +2,13 @@ import {
   type AppConfig,
   FINDING_KINDS,
   type FindingKind,
+  PROVIDER_CAPABILITY_KEYS,
   type ProviderConfig,
   SEMANTIC_FINDING_KINDS,
   type SemanticDetectorConfig,
   type SemanticFindingKind,
 } from "./types.ts";
+import { PROVIDER_CAPABILITY_TABLE } from "./provider_capabilities.ts";
 
 const DEFAULT_PATH = "config/egrysa.example.json";
 
@@ -233,4 +235,25 @@ function validateProvider(provider: ProviderConfig): void {
     ) || !["none", "standard", "unknown"].includes(provider.dataPolicy.retention) ||
     typeof provider.dataPolicy.allowRaw !== "boolean"
   ) throw new Error(`provider ${provider.id} requires an explicit dataPolicy`);
+  if (provider.capabilities !== undefined) {
+    if (
+      !provider.capabilities || typeof provider.capabilities !== "object" ||
+      Array.isArray(provider.capabilities)
+    ) throw new Error(`provider ${provider.id} capabilities must be an object`);
+    const known = new Set<string>(PROVIDER_CAPABILITY_KEYS);
+    for (const [key, value] of Object.entries(provider.capabilities)) {
+      if (!known.has(key)) {
+        throw new Error(`provider ${provider.id} has unknown capability: ${key}`);
+      }
+      if (typeof value !== "boolean") {
+        throw new Error(`provider ${provider.id} capability ${key} must be boolean`);
+      }
+      if (
+        value &&
+        !PROVIDER_CAPABILITY_TABLE[provider.kind][key as keyof typeof provider.capabilities]
+      ) {
+        throw new Error(`provider ${provider.id} cannot enable unsupported capability: ${key}`);
+      }
+    }
+  }
 }

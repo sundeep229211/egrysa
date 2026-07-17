@@ -298,3 +298,48 @@ Deno.test("receipt rotation fsyncs a signed checkpoint and resumes continuity", 
     await Deno.remove(directory, { recursive: true }).catch(() => undefined);
   }
 });
+
+Deno.test("receipt startup rejects a missing head after interrupted rotation", async () => {
+  const keys = await configureTestEnvironment();
+  const directory = await Deno.makeTempDir({ prefix: "egrysa-interrupted-rotation-" });
+  const path = `${directory}/receipts.jsonl`;
+  const options = {
+    fingerprintKey: "a-test-fingerprint-key-that-is-at-least-32-characters",
+    privateKeyPkcs8: keys.privateKey,
+    publicKeySpki: keys.publicKey,
+    chainId: "interrupted-rotation-test",
+    logPath: path,
+    capacity: 10,
+    maxLogBytes: 1_024,
+  };
+  const input = {
+    requestCanonical: "{}",
+    workloadId: "finance-copilot",
+    decision: "allow_raw" as const,
+    provider: "local",
+    model: "approved-model",
+    findings: [],
+    transformedFields: 0,
+    egress: "completed" as const,
+  };
+  try {
+    const store = await ReceiptStore.open(options);
+    await store.create(input);
+    await store.create(input);
+    await store.close();
+    await Deno.rename(path, `${path}.interrupted`);
+    let message = "";
+    try {
+      const restarted = await ReceiptStore.open(options);
+      await restarted.close();
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    if (
+      !message.includes("receipt head log is missing after an interrupted rotation") ||
+      !message.includes("explicitly start a fresh chain")
+    ) throw new Error("interrupted rotation was allowed to silently restart the receipt chain");
+  } finally {
+    await Deno.remove(directory, { recursive: true }).catch(() => undefined);
+  }
+});

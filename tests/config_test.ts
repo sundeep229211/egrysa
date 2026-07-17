@@ -66,6 +66,25 @@ Deno.test("configuration cannot label a remote endpoint as local", () => {
   );
 });
 
+Deno.test("provider capability overrides accept only known boolean narrowing", () => {
+  const narrowed = testConfig();
+  narrowed.providers[1]!.capabilities = { seed: false, tools: false };
+  validateConfig(narrowed);
+
+  const unknown = testConfig();
+  (unknown.providers[1]!.capabilities as Record<string, unknown>) = { imaginary: false };
+  assertThrows(() => validateConfig(unknown), "unknown capability: imaginary");
+
+  const nonBoolean = testConfig();
+  (nonBoolean.providers[1]!.capabilities as Record<string, unknown>) = { seed: "no" };
+  assertThrows(() => validateConfig(nonBoolean), "capability seed must be boolean");
+
+  const widened = testConfig();
+  widened.providers[0]!.kind = "anthropic";
+  widened.providers[0]!.capabilities = { seed: true };
+  assertThrows(() => validateConfig(widened), "cannot enable unsupported capability: seed");
+});
+
 Deno.test("configuration rejects a remote semantic detector endpoint at startup", () => {
   const config = testConfig();
   config.semanticDetector!.enabled = true;

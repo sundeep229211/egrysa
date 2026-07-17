@@ -7,6 +7,8 @@ public tag.
 
 ### Added
 
+- Provider conformance harness with deterministic wire checks, informational surrogate-fidelity
+  evidence, dated JSON reports, and a generated README support matrix.
 - OpenAI-compatible text gateway with deterministic policy decisions.
 - Authenticated model discovery, OpenAI-compatible SSE streaming, and bounded function tools.
 - OpenAI, Anthropic, and local OpenAI-compatible adapters.
@@ -24,6 +26,15 @@ public tag.
 
 ### Changed
 
+- Receipt startup now refuses to create a duplicate sequence space when rotated history exists but
+  the active head log is missing or empty after an interrupted rotation.
+- Provider adapters now enforce explicit capability profiles, allow validated narrowing overrides,
+  disclose dropped tuning fields in `x-egrysa-downgraded`, and reject semantic mismatches with 422.
+- Anthropic streaming is emulated as stable OpenAI SSE frames, including tool-call deltas and
+  optional usage, and is disclosed as `stream-emulated` rather than presented as incremental
+  streaming.
+- Publication-facing architecture, operations, conformance, and quickstart documentation now links
+  neutrality and receipt claims to their implementation and runnable evidence.
 - Provider-attempt receipts now use a strict version-4 shape with `completed`, `failed`, or
   streaming `started` egress outcome; deny receipts and existing version-2/version-3 verification
   remain unchanged.

@@ -14,6 +14,11 @@ reference semantic kind and six negatives. `deno task eval:semantic` runs the sa
 enabled customer-local model selected by `EGRYSA_CONFIG`; it is evidence-only and does not gate
 release recall.
 
+`conformance/` holds dated, content-free provider reports produced by
+`deno task conformance -- --provider <id>`. Wire checks gate that individual run; surrogate fidelity
+is informational. No live report is committed until its provider endpoint has actually been tested.
+See [`docs/CONFORMANCE.md`](../docs/CONFORMANCE.md) for the report and contribution workflow.
+
 Contribution rules:
 
 1. Prefer adversarial and false-positive cases over repetitions of obvious formats.

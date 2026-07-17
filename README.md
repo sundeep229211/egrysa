@@ -34,7 +34,8 @@ training settings are policy inputs that must be validated through contract and 
 ## Demonstrated in this repository
 
 - OpenAI-compatible `POST /v1/chat/completions` ingress and `GET /v1/models` discovery.
-- SSE streaming for OpenAI-compatible providers with bounded holdback recomposition.
+- Native OpenAI-compatible SSE plus disclosed Anthropic SSE emulation, both using bounded holdback
+  recomposition ([adapter code](src/providers.ts), [stream tests](tests/providers_test.ts)).
 - Function-tool definitions, assistant tool calls, and tool results as inspected text surfaces;
   Egrysa does not execute tools.
 - Deterministic detection for emails, phones, IP addresses, IBANs, payment cards, hyphenated US
@@ -44,20 +45,42 @@ training settings are policy inputs that must be validated through contract and 
   best-effort; measured evidence is in [EVALUATION.md](docs/EVALUATION.md).
 - Four decisions: `deny`, `local_only`, `transform`, and explicitly approved `allow_raw`.
 - Request-scoped, consistent surrogate replacement and local response recomposition.
-- OpenAI, Anthropic, and local OpenAI-compatible provider adapters.
+- OpenAI, Anthropic, and local OpenAI-compatible adapters with an explicit
+  [capability table](src/provider_capabilities.ts), validated narrowing overrides, and disclosed
+  downgrades.
 - Model allowlists, HTTPS enforcement, loopback-only HTTP, upstream deadlines, request-size limits,
   and no redirects.
 - `store: false` forced on OpenAI-compatible remote requests.
-- Append-only JSONL, Ed25519-signed, hash-chained policy receipts with workload attribution, a keyed
-  nonce-bound request fingerprint, public verification material, and no raw prompt or response.
+- Fsynced, rotating JSONL, Ed25519-signed, hash-chained policy receipts with workload attribution, a
+  keyed nonce-bound request fingerprint, public verification material, and no raw prompt or response
+  ([implementation](src/receipts.ts), [verification tests](tests/receipts_test.ts)).
 - No raw prompt or response logging.
 - Deno capability sandbox, no subprocess/FFI permission, and zero third-party runtime packages.
 - Hardened Kubernetes baseline, immutable CI actions, CodeQL, dependency review, SBOM, and SLSA
   provenance configuration.
 
+## Provider support matrix
+
+The defaults below are generated from the [adapter capability table](src/provider_capabilities.ts).
+Per-provider configuration may narrow them. A report link is runnable evidence for one recorded
+provider/model/version, not a universal compatibility claim. See
+[Provider conformance](docs/CONFORMANCE.md).
+
+<!-- provider-matrix:start -->
+
+| Provider kind     | Non-streaming | Streaming | Tools | Default tuning downgrades                                             | Conformance report |
+| ----------------- | ------------- | --------- | ----- | --------------------------------------------------------------------- | ------------------ |
+| openai            | yes           | native    | yes   | none                                                                  | **report wanted**  |
+| openai-compatible | yes           | native    | yes   | none                                                                  | **report wanted**  |
+| anthropic         | yes           | emulated  | yes   | seed, top_p, frequency_penalty, presence_penalty, parallel_tool_calls | **report wanted**  |
+
+<!-- provider-matrix:end -->
+
 ## Deliberate exclusions
 
-- Anthropic-adapter streaming remains unsupported and fails closed.
+- Anthropic streaming is buffered upstream and emitted as OpenAI SSE only after the full response is
+  available. The `x-egrysa-downgraded: stream-emulated` header makes the lack of incremental tokens
+  explicit; native Anthropic streaming is not implemented.
 - Function tools are passed through but never executed. Sensitive structural schema keys fail
   closed.
 - No files, audio, or images: each creates a separate egress and injection boundary.
@@ -85,9 +108,22 @@ assurance. It must not depend on observing customer prompt content.
 
 ## Local evaluation
 
-Requirements: Deno 2.9.2. The repository has no external code dependencies.
+Requirements: Deno 2.9.2 and Ollama for the default local path. The repository has no external code
+dependencies.
 
-1. Generate an attributed client key, a 32-byte fingerprint key, and a matching Ed25519 keypair:
+1. Start Ollama:
+
+   ```sh
+   ollama serve
+   ```
+
+   In another terminal, install the model used by the example config:
+
+   ```sh
+   ollama pull gpt-oss:20b
+   ```
+
+2. Generate an attributed client key, a 32-byte fingerprint key, and a matching Ed25519 keypair:
 
    ```sh
    deno task keygen > .env.local
@@ -99,17 +135,18 @@ Requirements: Deno 2.9.2. The repository has no external code dependencies.
 
    ```text
    EGRYSA_INBOUND_KEYS=example-workload=<client bearer key>
+   EGRYSA_CLIENT_KEY=<same client bearer key>
    EGRYSA_RECEIPT_FINGERPRINT_KEY=<request-fingerprint key>
    EGRYSA_RECEIPT_ED25519_PRIVATE_KEY=<base64 PKCS8 private key>
    EGRYSA_RECEIPT_ED25519_PUBLIC_KEY=<base64 SPKI public key>
    ```
 
-2. Keep provider keys in `.env.local`; never put them in JSON or Git.
-3. Review `config/egrysa.example.json`. Remote raw egress and the semantic detector are disabled by
-   default. Configure a local model or explicitly approve clean raw egress only after the provider
-   contract is reviewed. See [Operations](docs/OPERATIONS.md#reference-local-semantic-detector) for
-   the Ollama enablement and monitoring path.
-4. Run:
+3. Review `config/egrysa.example.json`. The quickstart request below explicitly selects the
+   configured local Ollama provider; the semantic detector remains off. Remote provider keys are
+   optional for this path and must stay in `.env.local`, never JSON or Git. See
+   [Operations](docs/OPERATIONS.md#reference-local-semantic-detector) before enabling semantic
+   detection or remote egress.
+4. Verify the repository, then start the gateway:
 
    ```sh
    deno task check
@@ -118,14 +155,27 @@ Requirements: Deno 2.9.2. The repository has no external code dependencies.
    deno task dev
    ```
 
-5. Call the gateway with the client key:
+5. In another terminal, load the generated client key and call the gateway:
 
    ```sh
+   set -a
+   source .env.local
+   set +a
    curl http://127.0.0.1:8787/v1/chat/completions \
      -H "Authorization: Bearer $EGRYSA_CLIENT_KEY" \
      -H "Content-Type: application/json" \
-     -d '{"model":"gpt-5.2","messages":[{"role":"user","content":"Email alex@example.com with a two-line summary."}]}'
+     -H "x-egrysa-provider: local" \
+     -d '{"model":"gpt-oss:20b","messages":[{"role":"user","content":"Email alex@example.com with a two-line summary."}]}'
    ```
+
+6. Produce neutrality evidence for the same endpoint:
+
+   ```sh
+   deno task conformance -- --provider local
+   ```
+
+   The task requests network permission only for the configured Ollama host and writes a
+   content-free dated report under `evals/conformance/`.
 
 The response headers contain `x-egrysa-decision` and `x-egrysa-receipt`. The public verification key
 and an externally storable signed chain checkpoint are available at `/v1/receipts/public-key` and
@@ -138,6 +188,7 @@ and an externally storable signed chain checkpoint are available at `/v1/receipt
 - [Threat model](docs/THREAT_MODEL.md)
 - [Control mapping](docs/COMPLIANCE.md)
 - [Evaluation record](docs/EVALUATION.md)
+- [Provider conformance](docs/CONFORMANCE.md)
 - [Release-image SBOM advisory triage](docs/SBOM_TRIAGE.md)
 - [Research roadmap](docs/RESEARCH_ROADMAP.md)
 - [Preliminary naming screen](docs/NAMING.md)

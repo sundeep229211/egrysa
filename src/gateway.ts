@@ -224,6 +224,7 @@ export class Gateway {
             "x-accel-buffering": "no",
             "x-egrysa-receipt": receipt.id,
             "x-egrysa-decision": policy.decision,
+            ...downgradeHeaders(invocation.downgraded),
             ...securityHeaders(),
           },
         });
@@ -246,6 +247,7 @@ export class Gateway {
       return json(recomposed, 200, {
         "x-egrysa-receipt": receipt.id,
         "x-egrysa-decision": policy.decision,
+        ...downgradeHeaders(invocation.downgraded),
       });
     } catch (error) {
       if (error instanceof ProviderError) {
@@ -535,6 +537,10 @@ function securityHeaders(): HeadersInit {
     "referrer-policy": "no-referrer",
     "content-security-policy": "default-src 'none'",
   };
+}
+
+function downgradeHeaders(fields: string[]): HeadersInit {
+  return fields.length === 0 ? {} : { "x-egrysa-downgraded": fields.join(",") };
 }
 
 function json(value: unknown, status = 200, extra: HeadersInit = {}): Response {

@@ -56,6 +56,9 @@ paths:
           headers:
             x-egrysa-decision: { schema: { enum: [allow_raw, transform, local_only] } }
             x-egrysa-receipt: { schema: { type: string, format: uuid } }
+            x-egrysa-downgraded:
+              schema: { type: string }
+              description: Comma-separated request fields dropped or emulated under the selected provider capability profile.
           content:
             application/json: { schema: { type: object } }
             text/event-stream: { schema: { type: string } }

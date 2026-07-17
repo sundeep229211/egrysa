@@ -198,10 +198,14 @@ export class ReceiptStore {
     try {
       content = await Deno.readTextFile(this.options.logPath);
     } catch (error) {
-      if (error instanceof Deno.errors.NotFound) return;
+      if (error instanceof Deno.errors.NotFound) {
+        await this.#assertNoInterruptedRotation();
+        return;
+      }
       throw error;
     }
     const lines = content.split("\n").filter((line) => line.trim());
+    if (lines.length === 0) await this.#assertNoInterruptedRotation();
     for (const [index, line] of lines.entries()) {
       let parsed: unknown;
       try {
@@ -220,6 +224,34 @@ export class ReceiptStore {
       this.#remember(receipt);
       this.#activeReceiptCount++;
     }
+  }
+
+  async #assertNoInterruptedRotation(): Promise<void> {
+    const separator = this.options.logPath.lastIndexOf("/");
+    const directory = separator < 0 ? "." : this.options.logPath.slice(0, separator) || "/";
+    const basename = separator < 0
+      ? this.options.logPath
+      : this.options.logPath.slice(separator + 1);
+    const rotated: Array<{ name: string; sequence: number }> = [];
+    try {
+      for await (const entry of Deno.readDir(directory)) {
+        if (!entry.isFile) continue;
+        const suffix = entry.name.slice(`${basename}.`.length);
+        if (!entry.name.startsWith(`${basename}.`) || !/^\d+$/.test(suffix)) continue;
+        rotated.push({ name: entry.name, sequence: Number(suffix) });
+      }
+    } catch (error) {
+      if (error instanceof Deno.errors.NotFound) return;
+      throw error;
+    }
+    if (rotated.length === 0) return;
+    rotated.sort((left, right) => right.sequence - left.sequence);
+    const newest = `${directory === "." ? "" : `${directory}/`}${rotated[0]!.name}`;
+    throw new Error(
+      `receipt head log is missing after an interrupted rotation; recover by renaming ${newest} ` +
+        `to ${this.options.logPath}, or explicitly start a fresh chain with a new receiptChainId ` +
+        "and log path",
+    );
   }
 
   async #loadCheckpoint(checkpoint: ReceiptCheckpoint): Promise<void> {

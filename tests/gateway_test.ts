@@ -155,6 +155,9 @@ Deno.test("gateway transforms before egress and recomposes after inference", asy
       }),
     );
     if (response.status !== 200) throw new Error(`expected 200, got ${response.status}`);
+    if (response.headers.has("x-egrysa-downgraded")) {
+      throw new Error("fully supported request reported a capability downgrade");
+    }
     const upstreamBody = capture.body;
     if (!upstreamBody) throw new Error("provider was not invoked");
     const upstreamText = JSON.stringify(upstreamBody);
@@ -181,6 +184,211 @@ Deno.test("gateway transforms before egress and recomposes after inference", asy
     )).json();
     if (receipt.version !== "4" || receipt.egress !== "completed") {
       throw new Error("successful provider invocation was not attested as completed egress");
+    }
+  } finally {
+    await server.shutdown();
+  }
+});
+
+Deno.test("Anthropic tuning downgrades are dropped and disclosed", async () => {
+  await configureTestEnvironment();
+  Deno.env.set("TEST_ANTHROPIC_CAPABILITY_KEY", "test-key");
+  let resolveAddress!: (port: number) => void;
+  const portPromise = new Promise<number>((resolve) => resolveAddress = resolve);
+  let upstream: Record<string, unknown> | null = null;
+  const server = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: ({ port }) => resolveAddress(port),
+  }, async (request) => {
+    upstream = await request.json() as Record<string, unknown>;
+    return Response.json({
+      id: "anthropic-capability-test",
+      model: "approved-model",
+      content: [{ type: "text", text: "completed" }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 4, output_tokens: 1 },
+    });
+  });
+  try {
+    const config = testConfig();
+    config.providers[0] = {
+      id: "remote",
+      kind: "anthropic",
+      baseUrl: `http://127.0.0.1:${await portPromise}`,
+      apiKeyEnv: "TEST_ANTHROPIC_CAPABILITY_KEY",
+      allowedModels: ["approved-model"],
+      dataPolicy: { training: "disabled", retention: "none", allowRaw: true },
+    };
+    const gateway = await Gateway.create(config);
+    const response = await gateway.handle(
+      new Request("http://gateway/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer a-test-client-key-that-is-long-enough",
+          "content-type": "application/json",
+          "x-egrysa-provider": "remote",
+        },
+        body: JSON.stringify({
+          model: "approved-model",
+          messages: [{ role: "user", content: "ordinary request" }],
+          seed: 7,
+          top_p: 0.8,
+        }),
+      }),
+    );
+    if (
+      response.status !== 200 || response.headers.get("x-egrysa-downgraded") !== "seed,top_p" ||
+      !upstream || "seed" in upstream || "top_p" in upstream
+    ) throw new Error("Anthropic tuning downgrade was silent or reached the provider");
+  } finally {
+    await server.shutdown();
+    Deno.env.delete("TEST_ANTHROPIC_CAPABILITY_KEY");
+  }
+});
+
+Deno.test("Anthropic stream emulation is disclosed on the gateway response", async () => {
+  await configureTestEnvironment();
+  Deno.env.set("TEST_ANTHROPIC_STREAM_KEY", "test-key");
+  let resolveAddress!: (port: number) => void;
+  const portPromise = new Promise<number>((resolve) => resolveAddress = resolve);
+  const server = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: ({ port }) => resolveAddress(port),
+  }, () =>
+    Response.json({
+      id: "anthropic-stream-test",
+      model: "approved-model",
+      content: [{ type: "text", text: "completed" }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 4, output_tokens: 1 },
+    }));
+  try {
+    const config = testConfig();
+    config.providers[0] = {
+      id: "remote",
+      kind: "anthropic",
+      baseUrl: `http://127.0.0.1:${await portPromise}`,
+      apiKeyEnv: "TEST_ANTHROPIC_STREAM_KEY",
+      allowedModels: ["approved-model"],
+      dataPolicy: { training: "disabled", retention: "none", allowRaw: true },
+    };
+    const gateway = await Gateway.create(config);
+    const response = await gateway.handle(
+      new Request("http://gateway/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer a-test-client-key-that-is-long-enough",
+          "content-type": "application/json",
+          "x-egrysa-provider": "remote",
+        },
+        body: JSON.stringify({
+          model: "approved-model",
+          messages: [{ role: "user", content: "ordinary request" }],
+          stream: true,
+          stream_options: { include_usage: true },
+        }),
+      }),
+    );
+    const body = await response.text();
+    if (
+      response.status !== 200 ||
+      response.headers.get("x-egrysa-downgraded") !== "stream-emulated" ||
+      !body.includes('"prompt_tokens":4') || !body.endsWith("data: [DONE]\n\n")
+    ) throw new Error("Anthropic stream emulation was not disclosed or valid SSE");
+  } finally {
+    await server.shutdown();
+    Deno.env.delete("TEST_ANTHROPIC_STREAM_KEY");
+  }
+});
+
+Deno.test("OpenAI-compatible capability override drops and discloses tuning fields", async () => {
+  await configureTestEnvironment();
+  let resolveAddress!: (port: number) => void;
+  const portPromise = new Promise<number>((resolve) => resolveAddress = resolve);
+  let upstream: Record<string, unknown> | null = null;
+  const server = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: ({ port }) => resolveAddress(port),
+  }, async (request) => {
+    upstream = await request.json() as Record<string, unknown>;
+    return Response.json({
+      id: "compatible-capability-test",
+      object: "chat.completion",
+      choices: [{ index: 0, message: { role: "assistant", content: "completed" } }],
+    });
+  });
+  try {
+    const config = testConfig();
+    config.providers[1]!.baseUrl = `http://127.0.0.1:${await portPromise}/v1`;
+    config.providers[1]!.capabilities = { seed: false };
+    const gateway = await Gateway.create(config);
+    const response = await gateway.handle(
+      new Request("http://gateway/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer a-test-client-key-that-is-long-enough",
+          "content-type": "application/json",
+          "x-egrysa-provider": "local",
+        },
+        body: JSON.stringify({
+          model: "approved-model",
+          messages: [{ role: "user", content: "ordinary request" }],
+          seed: 11,
+        }),
+      }),
+    );
+    if (
+      response.status !== 200 || response.headers.get("x-egrysa-downgraded") !== "seed" ||
+      !upstream || "seed" in upstream
+    ) throw new Error("OpenAI-compatible capability override was not enforced and disclosed");
+  } finally {
+    await server.shutdown();
+  }
+});
+
+Deno.test("semantic capability violations fail with a named 422 before provider egress", async () => {
+  await configureTestEnvironment();
+  let resolveAddress!: (port: number) => void;
+  const portPromise = new Promise<number>((resolve) => resolveAddress = resolve);
+  let calls = 0;
+  const server = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: ({ port }) => resolveAddress(port),
+  }, () => {
+    calls++;
+    return Response.json({});
+  });
+  try {
+    const config = testConfig();
+    config.providers[1]!.baseUrl = `http://127.0.0.1:${await portPromise}/v1`;
+    config.providers[1]!.capabilities = { tools: false };
+    const gateway = await Gateway.create(config);
+    const response = await gateway.handle(
+      new Request("http://gateway/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer a-test-client-key-that-is-long-enough",
+          "content-type": "application/json",
+          "x-egrysa-provider": "local",
+        },
+        body: JSON.stringify({
+          model: "approved-model",
+          messages: [{ role: "user", content: "use the tool" }],
+          tools: [{
+            type: "function",
+            function: { name: "ping", parameters: { type: "object" } },
+          }],
+          tool_choice: "required",
+        }),
+      }),
+    );
+    const body = await response.json();
+    if (response.status !== 422 || calls !== 0 || !String(body.detail).includes("tools")) {
+      throw new Error("semantic capability violation was degraded or reached the provider");
     }
   } finally {
     await server.shutdown();
