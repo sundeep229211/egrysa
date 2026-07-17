@@ -12,6 +12,11 @@ public tag.
 - OpenAI, Anthropic, and local OpenAI-compatible adapters.
 - Request-scoped surrogates, streaming/local recomposition, and durable Ed25519 policy receipts.
 - Versioned timeout-bounded detector interface and explicit workload attribution.
+- Off-by-default reference local semantic detector for person names, physical addresses, and
+  semantically confidential organizational content, with bounded chunking and literal-source
+  candidate validation.
+- Version-3 semantic detector receipts, content-free detector metrics, deterministic degradation,
+  high-assurance deny mode, and offline/live semantic evaluation tasks.
 - Black-box acceptance coverage for streaming, tools, timeout, cancellation, residue failure, public
   verification, and restart continuity.
 - Synthetic evaluation suite with per-class precision/recall, hardened deployment examples, and
@@ -27,10 +32,13 @@ public tag.
   identifiers; operators must still review availability and policy for their own accounts.
 - Expanded the implementation-authored evaluation corpus from 12 to 48 positive, mixed, and
   false-positive cases.
+- Added 18 labelled semantic cases and recorded the first local `gpt-oss:20b` reference results.
 
 ### Security
 
 - Every detected data class must have exactly one startup policy action.
+- Semantic detector configuration must resolve to an approved loopback provider marked local;
+  semantic candidates are low precision and cannot create a finding-based hard deny.
 - Optional provider parameters require strict runtime types and bounds before egress.
 - Validation errors do not reflect uninspected request-field names or values.
 - Request fingerprints are HMAC-protected and nonce-bound; receipt authenticity is independently

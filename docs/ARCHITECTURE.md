@@ -8,7 +8,9 @@ flowchart TB
       U["User / application"] --> SDK["Client or agent SDK"]
       SDK --> G["Egrysa ingress"]
       G --> V["Validate: auth, size, modality, model"]
-      V --> C["Classify: secrets, PII, confidential terms"]
+      V --> D["Deterministic detectors"]
+      D --> SD["Optional local semantic detector"]
+      SD --> C["Merge findings: deterministic priority"]
       C --> P{"Policy decision"}
       P -->|"deny"| B["Local block"]
       P -->|"local_only"| LM["Customer-hosted model"]
@@ -35,7 +37,7 @@ flowchart TB
 | Point            | Customer control                           | Egrysa control                                                         | Not controlled here                                             |
 | ---------------- | ------------------------------------------ | ---------------------------------------------------------------------- | --------------------------------------------------------------- |
 | User input       | Endpoint, identity, acceptable-use policy  | API authentication and supported shape                                 | Copy/paste before the gateway                                   |
-| Pre-egress       | Network placement and taxonomy             | classify, deny, transform, route                                       | Unknown entities outside the taxonomy                           |
+| Pre-egress       | Network placement and taxonomy             | deterministic classify; optional local semantic candidates; policy     | Unknown entities and semantic model misses                      |
 | Egress           | DNS, firewall, proxy, private connectivity | fixed provider URL, HTTPS, no redirect, model allowlist                | Public internet routing and provider edge                       |
 | Provider request | Contract, project, region, entitlements    | strips unsupported fields; forces `store:false` for OpenAI-style calls | Provider safety review, legal holds, metadata, internal systems |
 | Inference        | provider/model choice                      | approved provider and model only                                       | weights, caches, internal routing, model behavior               |
@@ -50,6 +52,8 @@ flowchart TB
 - Receipts contain workload attribution, a keyed nonce-bound request fingerprint, finding counts,
   decision, provider/model identifiers, and chain/signature values only. They contain no raw prompt
   or response content.
+- When semantic detection is enabled, version-3 receipts add only detector IDs/versions and a
+  degradation boolean. Disabled mode retains the version-2 receipt shape.
 - Provider credentials are read from named environment variables and never accepted in request
   bodies.
 - Remote providers require HTTPS; plaintext HTTP is limited to loopback providers explicitly marked
@@ -59,6 +63,11 @@ flowchart TB
   streaming and multimodal content fail closed.
 - Function definitions, message content, tool-call arguments, tool results, and JSON-schema string
   values are inspected. Sensitive structural schema keys cannot be transformed and are denied.
+- Semantic detector inputs use only a configured loopback provider marked `local:true`; redirects
+  are disabled, responses are bounded, model offsets are ignored, and candidates must occur
+  literally in the inspected source. Deterministic findings win every overlap.
+- Semantic findings are low precision. High-precision deterministic findings remain the only
+  finding-based path to a hard deny; low-precision candidates transform or route locally.
 
 ## Known engineering limits
 
@@ -68,3 +77,8 @@ request lifetime, swap restrictions, encrypted nodes, process isolation, memory 
 controls, and an external security review. A future hardened data plane may use a memory-safe native
 implementation with explicit secret-buffer handling, but that does not remove plaintext from active
 process memory.
+
+The reference semantic detector is probabilistic, model-dependent, and best-effort. It can miss
+entities, hallucinate literal substrings, be evaded by obfuscation, or add seconds of latency. Its
+failure policy is explicit: `degrade` discards semantic findings for the request and continues with
+the deterministic floor, while `deny` stops the request for higher-assurance deployments.

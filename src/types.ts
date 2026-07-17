@@ -8,9 +8,20 @@ export const FINDING_KINDS = [
   "private_key",
   "api_secret",
   "confidential_term",
+  "person_name",
+  "physical_address",
+  "semantic_confidential",
 ] as const;
 
 export type FindingKind = typeof FINDING_KINDS[number];
+
+export const SEMANTIC_FINDING_KINDS = [
+  "person_name",
+  "physical_address",
+  "semantic_confidential",
+] as const satisfies readonly FindingKind[];
+
+export type SemanticFindingKind = typeof SEMANTIC_FINDING_KINDS[number];
 
 export type Decision = "allow_raw" | "transform" | "local_only" | "deny";
 
@@ -22,7 +33,7 @@ export interface Finding {
   label?: string;
   detectorId?: string;
   confidence?: number;
-  precision?: "high" | "candidate";
+  precision?: "high" | "medium" | "low";
 }
 
 export interface DataPolicy {
@@ -41,6 +52,16 @@ export interface ProviderConfig {
   dataPolicy: DataPolicy;
 }
 
+export interface SemanticDetectorConfig {
+  enabled: boolean;
+  providerId?: string;
+  model?: string;
+  timeoutMs?: number;
+  maxInputBytes?: number;
+  onDetectorFailure?: "degrade" | "deny";
+  kinds?: SemanticFindingKind[];
+}
+
 export interface AppConfig {
   listen: { hostname: string; port: number };
   maxRequestBytes: number;
@@ -49,6 +70,7 @@ export interface AppConfig {
   receiptLogPath: string;
   receiptChainId: string;
   providers: ProviderConfig[];
+  semanticDetector?: SemanticDetectorConfig;
   policy: {
     defaultProvider: string;
     localProvider: string;
@@ -105,8 +127,12 @@ export interface ChatRequest {
   stream_options?: { include_usage?: boolean };
 }
 
-export interface PrivacyReceipt {
-  version: "2";
+export interface ReceiptDetector {
+  id: string;
+  version: string;
+}
+
+interface PrivacyReceiptBase {
   id: string;
   chainId: string;
   sequence: number;
@@ -125,6 +151,18 @@ export interface PrivacyReceipt {
   signingKeyId: string;
   signature: string;
 }
+
+export interface PrivacyReceiptV2 extends PrivacyReceiptBase {
+  version: "2";
+}
+
+export interface PrivacyReceiptV3 extends PrivacyReceiptBase {
+  version: "3";
+  detectors: ReceiptDetector[];
+  detectorDegraded: boolean;
+}
+
+export type PrivacyReceipt = PrivacyReceiptV2 | PrivacyReceiptV3;
 
 export interface ReceiptCheckpoint {
   version: "1";

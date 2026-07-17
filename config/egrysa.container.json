@@ -31,12 +31,21 @@
       "dataPolicy": { "training": "unknown", "retention": "none", "allowRaw": true }
     }
   ],
+  "semanticDetector": {
+    "enabled": false,
+    "providerId": "local",
+    "model": "gpt-oss:20b",
+    "timeoutMs": 2000,
+    "maxInputBytes": 16384,
+    "onDetectorFailure": "degrade",
+    "kinds": ["person_name", "physical_address", "semantic_confidential"]
+  },
   "policy": {
     "defaultProvider": "openai",
     "localProvider": "local",
     "blockKinds": ["credit_card", "private_key", "api_secret", "ssn"],
-    "localOnlyKinds": ["confidential_term"],
-    "transformKinds": ["email", "phone", "ipv4", "iban"],
+    "localOnlyKinds": ["confidential_term", "semantic_confidential"],
+    "transformKinds": ["email", "phone", "ipv4", "iban", "person_name", "physical_address"],
     "sensitiveTerms": [
       { "term": "Project Nightingale", "label": "initiative" },
       { "term": "Example Acquisition Target", "label": "organization" }

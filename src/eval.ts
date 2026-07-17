@@ -1,6 +1,11 @@
 import { classify } from "./classifier.ts";
 import { loadConfig } from "./config.ts";
 import { decide } from "./policy.ts";
+import {
+  loadSemanticEvalCases,
+  offlineSemanticEvalDetector,
+  runSemanticEvaluation,
+} from "./semantic_eval.ts";
 import { recompose, transform } from "./surrogate.ts";
 import { type Decision, FINDING_KINDS, type FindingKind } from "./types.ts";
 
@@ -56,6 +61,12 @@ for (const row of rows) {
 }
 
 const elapsed = performance.now() - started;
+const semantic = await runSemanticEvaluation(
+  await loadSemanticEvalCases(),
+  offlineSemanticEvalDetector(),
+  "offline",
+  "egrysa-semantic-stub@1.0.0",
+);
 const perKind = Object.fromEntries(
   Object.entries(counts).map(([kind, value]) => {
     const precision = ratio(value.tp, value.tp + value.fp);
@@ -80,12 +91,15 @@ const report = {
   transformationRoundTripAccuracy: ratio(successfulRoundTrips, transformCases),
   meanClassifierPolicyMs: elapsed / rows.length,
   rawPromptsPersisted: false,
+  semantic,
 };
 console.log(JSON.stringify(report, null, 2));
 if (
   report.macroPrecision < 0.95 || report.macroRecall < 0.95 ||
   report.decisionAccuracy < 0.95 || highSeverityLeaks > 0 || transformLeakage > 0 ||
-  report.transformationRoundTripAccuracy < 1
+  report.transformationRoundTripAccuracy < 1 ||
+  semantic.macroPrecision < 0.95 || semantic.macroRecall < 0.95 ||
+  semantic.falsePositiveRate > 0 || semantic.detectorFailures > 0
 ) Deno.exit(1);
 
 function ratio(numerator: number, denominator: number): number {
