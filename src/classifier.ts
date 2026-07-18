@@ -189,17 +189,17 @@ export function removeOverlaps(findings: Finding[]): Finding[] {
     "physical_address",
     "semantic_confidential",
   ];
-  const sorted = findings.sort((a, b) =>
+  const winner = (a: Finding, b: Finding) =>
     precisionPriority(a) - precisionPriority(b) || a.start - b.start ||
-    priority.indexOf(a.kind) - priority.indexOf(b.kind) || b.end - a.end
-  );
+    priority.indexOf(a.kind) - priority.indexOf(b.kind) || b.end - a.end;
+  const sorted = findings.toSorted((a, b) => a.start - b.start || winner(a, b) || a.end - b.end);
   const kept: Finding[] = [];
   for (const candidate of sorted) {
-    if (!kept.some((item) => item.start < candidate.end && candidate.start < item.end)) {
-      kept.push(candidate);
-    }
+    const previous = kept.at(-1);
+    if (!previous || previous.end <= candidate.start) kept.push(candidate);
+    else if (winner(candidate, previous) < 0) kept[kept.length - 1] = candidate;
   }
-  return kept.sort((a, b) => a.start - b.start || b.end - a.end);
+  return kept;
 }
 
 function precisionPriority(finding: Finding): number {

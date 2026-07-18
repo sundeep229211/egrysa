@@ -92,6 +92,23 @@ Deno.test("DONE tail flush preserves the latest completion chunk template", asyn
   if (!events.includes("data: [DONE]")) throw new Error("DONE marker was not preserved");
 });
 
+Deno.test("streaming bounds a provider event without an SSE boundary", async () => {
+  let failures = 0;
+  const oversized = new Uint8Array(4 * 1024 * 1024 + 1).fill("a".charCodeAt(0));
+  const upstream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(oversized);
+      controller.close();
+    },
+  });
+  const output = await new Response(
+    recomposeOpenAiStream(upstream, new Map(), () => failures++, () => undefined),
+  ).text();
+  if (!output.includes('"type":"upstream_stream_error"') || failures !== 1) {
+    throw new Error("boundary-less provider stream did not fail at the event-size bound");
+  }
+});
+
 function chunk(content: string): Record<string, unknown> {
   return {
     id: "chatcmpl-stream-test",

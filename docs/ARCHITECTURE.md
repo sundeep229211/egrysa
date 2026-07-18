@@ -78,8 +78,9 @@ then emitted as stable OpenAI chunk frames and disclosed as `stream-emulated`.
   or response content.
 - Denials retain version-2/version-3 policy receipts. Provider attempts use version-4 receipts:
   non-streaming success records `egress:completed`, invocation failure records `egress:failed`, and
-  streaming records `egress:started` after upstream response headers arrive. Stream completion
-  attestation is not claimed.
+  native streaming records `egress:started` after upstream response headers arrive. Buffered stream
+  emulation records `egress:completed` because upstream inference finishes before client egress.
+  Native stream completion attestation is not claimed.
 - When semantic detection is enabled, receipts add only detector IDs/versions and a degradation
   boolean. No receipt records finding text or request/response content.
 - Provider credentials are read from named environment variables and never accepted in request

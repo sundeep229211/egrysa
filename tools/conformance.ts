@@ -1,4 +1,5 @@
 import { loadConfig } from "../src/config.ts";
+import { readBoundedText } from "../src/bounded.ts";
 import {
   PROVIDER_CAPABILITY_TABLE,
   resolveProviderCapabilities,
@@ -348,29 +349,6 @@ function completionText(value: Record<string, unknown>): string {
   const choice = (value.choices as Array<Record<string, unknown>>)[0]!;
   const message = choice.message as Record<string, unknown>;
   return typeof message.content === "string" ? message.content : "";
-}
-
-async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
-  if (!response.body) throw new Error("response body is absent");
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let total = 0;
-  let output = "";
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel();
-        throw new Error("response exceeded conformance size bound");
-      }
-      output += decoder.decode(value, { stream: true });
-    }
-    return output + decoder.decode();
-  } finally {
-    reader.releaseLock();
-  }
 }
 
 function chatCompletionsUrl(provider: ProviderConfig): string {

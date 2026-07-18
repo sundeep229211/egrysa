@@ -2,6 +2,8 @@ import { hasSurrogateResidue } from "./surrogate.ts";
 
 export class RecompositionError extends Error {}
 
+const MAX_SSE_EVENT_BYTES = 4 * 1024 * 1024;
+
 export function recomposeOpenAiStream(
   upstream: ReadableStream<Uint8Array>,
   mapping: ReadonlyMap<string, string>,
@@ -13,6 +15,8 @@ export function recomposeOpenAiStream(
   const reader = upstream.getReader();
   const states = new Map<string, BufferedRecomposer>();
   let input = "";
+  let bufferedBytes = 0;
+  let scanFrom = 0;
   let template: Record<string, unknown> | null = null;
   let upstreamDone = false;
   let completed = false;
@@ -29,12 +33,25 @@ export function recomposeOpenAiStream(
       try {
         while (output.length === 0 && !upstreamDone) {
           const { value, done } = await reader.read();
+          bufferedBytes += value?.byteLength ?? 0;
           input += decoder.decode(value, { stream: !done });
           while (true) {
-            const boundary = nextEventBoundary(input);
-            if (!boundary) break;
+            const boundary = nextEventBoundary(input, scanFrom);
+            if (!boundary) {
+              scanFrom = Math.max(0, input.length - 3);
+              if (bufferedBytes > MAX_SSE_EVENT_BYTES) {
+                throw new Error("provider SSE event exceeded the size limit");
+              }
+              break;
+            }
             const frame = input.slice(0, boundary.index);
+            if (encoder.encode(frame).byteLength > MAX_SSE_EVENT_BYTES) {
+              throw new Error("provider SSE event exceeded the size limit");
+            }
+            const consumed = input.slice(0, boundary.index + boundary.length);
+            bufferedBytes = Math.max(0, bufferedBytes - encoder.encode(consumed).byteLength);
             input = input.slice(boundary.index + boundary.length);
+            scanFrom = 0;
             const event = processFrame(
               frame,
               states,
@@ -266,7 +283,12 @@ function state(
   return value;
 }
 
-function nextEventBoundary(value: string): { index: number; length: number } | null {
-  const match = /\r?\n\r?\n/.exec(value);
-  return match ? { index: match.index, length: match[0].length } : null;
+function nextEventBoundary(
+  value: string,
+  fromIndex: number,
+): { index: number; length: number } | null {
+  const match = /\r?\n\r?\n/g;
+  match.lastIndex = fromIndex;
+  const result = match.exec(value);
+  return result ? { index: result.index, length: result[0].length } : null;
 }

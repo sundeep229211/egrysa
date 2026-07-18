@@ -47,6 +47,15 @@ Deno.test("configuration validates the receipt rotation size", () => {
   );
 });
 
+Deno.test("configuration validates the provider response size floor", () => {
+  const config = testConfig();
+  config.maxResponseBytes = 64 * 1024 - 1;
+  assertThrows(() => validateConfig(config), "maxResponseBytes must be at least 64 KiB");
+
+  delete config.maxResponseBytes;
+  validateConfig(config);
+});
+
 Deno.test("configuration rejects unknown policy data classes", () => {
   const config = testConfig();
   (config.policy.transformKinds as string[]).push("unknown_identifier");

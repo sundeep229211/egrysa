@@ -120,9 +120,9 @@ Put `person_name` and `physical_address` in `transformKinds`, and `semantic_conf
 findings are deliberately low precision. Even if a future detector emits a low-precision candidate
 for a blocked kind, policy routes it locally instead of allowing it to hard-deny traffic.
 
-`maxInputBytes` is a per-model-call bound. Larger text surfaces are split on whitespace with at
-least 64 bytes of overlap. `timeoutMs` is the deadline for each chunk, while `totalTimeoutMs` is the
-deadline for the whole text surface and must be at least `timeoutMs`. Inputs requiring more than
+`maxInputBytes` is a per-model-call bound. Larger text surfaces are split on whitespace with 128
+bytes of overlap. `timeoutMs` is the deadline for each chunk, while `totalTimeoutMs` is the deadline
+for the whole text surface and must be at least `timeoutMs`. Inputs requiring more than
 approximately `totalTimeoutMs / timeoutMs` sequential chunks will degrade even if every chunk meets
 its individual deadline, so size `maxInputBytes` and both budgets together. The measured
 `gpt-oss:20b` reference run on an Apple M4 Pro had 11.95 seconds p95 added latency across short

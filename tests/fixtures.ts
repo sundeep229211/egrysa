@@ -4,6 +4,7 @@ export function testConfig(): AppConfig {
   return {
     listen: { hostname: "127.0.0.1", port: 8787 },
     maxRequestBytes: 1024 * 1024,
+    maxResponseBytes: 32 * 1024 * 1024,
     requestTimeoutMs: 5_000,
     receiptCapacity: 100,
     receiptLogPath: ":memory:",

@@ -1,4 +1,5 @@
 import { resolveSemanticDetectorConfig, validateSemanticDetectorConfig } from "./config.ts";
+import { BodySizeLimitError, readBoundedText } from "./bounded.ts";
 import { DetectorImplementationError, type LocalDetector } from "./detectors.ts";
 import type { AppConfig, Finding, ProviderConfig, SemanticFindingKind } from "./types.ts";
 
@@ -19,6 +20,8 @@ When uncertain, omit the candidate. An empty findings array is valid.`;
 const DEFAULT_OVERLAP_BYTES = 128;
 const MAX_RESPONSE_BYTES = 256 * 1024;
 const MAX_TOTAL_INPUT_BYTES = 10 * 1024 * 1024;
+const MAX_OCCURRENCES_PER_CANDIDATE = 64;
+const MAX_SEMANTIC_FINDINGS_PER_SURFACE = 512;
 const encoder = new TextEncoder();
 
 interface Candidate {
@@ -88,7 +91,12 @@ class ReferenceSemanticDetector implements LocalDetector {
     const findings: Finding[] = [];
     for (const candidate of candidates.values()) {
       let start = text.indexOf(candidate.text);
+      let occurrences = 0;
       while (start !== -1) {
+        if (
+          occurrences >= MAX_OCCURRENCES_PER_CANDIDATE ||
+          findings.length >= MAX_SEMANTIC_FINDINGS_PER_SURFACE
+        ) throw new DetectorImplementationError("oversized_findings");
         findings.push({
           kind: candidate.kind,
           start,
@@ -97,6 +105,7 @@ class ReferenceSemanticDetector implements LocalDetector {
           confidence: candidate.confidence,
           precision: "low",
         });
+        occurrences++;
         start = text.indexOf(candidate.text, start + 1);
       }
     }
@@ -118,7 +127,15 @@ class ReferenceSemanticDetector implements LocalDetector {
         await response.body?.cancel();
         throw new DetectorImplementationError("endpoint");
       }
-      const raw = await readBoundedResponse(response);
+      let raw: string;
+      try {
+        raw = await readBoundedText(response, MAX_RESPONSE_BYTES);
+      } catch (error) {
+        if (error instanceof BodySizeLimitError) {
+          throw new DetectorImplementationError("response_too_large");
+        }
+        throw error;
+      }
       let envelope: unknown;
       try {
         envelope = JSON.parse(raw);
@@ -174,39 +191,6 @@ async function detectorFetch(
     }
     throw new DetectorImplementationError("connection");
   }
-}
-
-async function readBoundedResponse(response: Response): Promise<string> {
-  const declared = Number(response.headers.get("content-length") ?? 0);
-  if (declared > MAX_RESPONSE_BYTES) {
-    await response.body?.cancel();
-    throw new DetectorImplementationError("response_too_large");
-  }
-  if (!response.body) throw new DetectorImplementationError("schema");
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > MAX_RESPONSE_BYTES) {
-        await reader.cancel();
-        throw new DetectorImplementationError("response_too_large");
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(bytes);
 }
 
 function completionContent(value: unknown): string {

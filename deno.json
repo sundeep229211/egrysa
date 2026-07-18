@@ -30,9 +30,5 @@
     "compile": "deno compile --frozen --no-prompt --allow-read=config,data --allow-write=data --allow-env=EGRYSA_CONFIG,EGRYSA_INBOUND_KEYS,EGRYSA_RECEIPT_FINGERPRINT_KEY,EGRYSA_RECEIPT_ED25519_PRIVATE_KEY,EGRYSA_RECEIPT_ED25519_PUBLIC_KEY,OPENAI_API_KEY,ANTHROPIC_API_KEY --allow-net=127.0.0.1:8787,0.0.0.0:8787,api.openai.com,api.anthropic.com,localhost:11434 --output dist/egrysa src/main.ts",
     "smoke": "deno test --env-file=.env.local --allow-net=api.openai.com --allow-env=OPENAI_API_KEY,EGRYSA_LIVE_TEST tests/live_openai_test.ts"
   },
-  "lock": {
-    "path": "./deno.lock",
-    "frozen": false
-  },
   "exclude": ["dist", "artifacts"]
 }

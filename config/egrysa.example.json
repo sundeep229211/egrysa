@@ -1,6 +1,7 @@
 {
   "listen": { "hostname": "127.0.0.1", "port": 8787 },
   "maxRequestBytes": 1048576,
+  "maxResponseBytes": 33554432,
   "requestTimeoutMs": 60000,
   "receiptCapacity": 10000,
   "receiptLogPath": "data/receipts.jsonl",

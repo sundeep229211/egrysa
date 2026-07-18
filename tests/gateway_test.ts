@@ -101,6 +101,56 @@ Deno.test("gateway rejects uninspected request fields at the boundary", async ()
   }
 });
 
+Deno.test("gateway bounds a chunked request body before buffering it", async () => {
+  await configureTestEnvironment();
+  const config = testConfig();
+  config.maxRequestBytes = 1_024;
+  config.semanticDetector!.maxInputBytes = 256;
+  const gateway = await Gateway.create(config);
+  let produced = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (produced >= 100) return controller.close();
+      produced++;
+      controller.enqueue(new Uint8Array(256).fill(32));
+    },
+  });
+  const response = await gateway.handle(
+    new Request("http://gateway/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer a-test-client-key-that-is-long-enough",
+        "content-type": "application/json",
+      },
+      body,
+    }),
+  );
+  if (response.status !== 413 || produced >= 100) {
+    throw new Error("chunked oversized request was fully buffered before rejection");
+  }
+});
+
+Deno.test("gateway caps model identifiers before receipt persistence", async () => {
+  await configureTestEnvironment();
+  const gateway = await Gateway.create(testConfig());
+  const response = await gateway.handle(
+    new Request("http://gateway/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer a-test-client-key-that-is-long-enough",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "m".repeat(257),
+        messages: [{ role: "user", content: "ordinary request" }],
+      }),
+    }),
+  );
+  if (response.status !== 422 || !String((await response.json()).detail).includes("256")) {
+    throw new Error("oversized model identifier was accepted");
+  }
+});
+
 Deno.test("gateway keeps readiness minimal and protects metrics", async () => {
   await configureTestEnvironment();
   const gateway = await Gateway.create(testConfig());
@@ -297,6 +347,15 @@ Deno.test("Anthropic stream emulation is disclosed on the gateway response", asy
       response.headers.get("x-egrysa-downgraded") !== "stream-emulated" ||
       !body.includes('"prompt_tokens":4') || !body.endsWith("data: [DONE]\n\n")
     ) throw new Error("Anthropic stream emulation was not disclosed or valid SSE");
+    const receiptId = response.headers.get("x-egrysa-receipt");
+    const receipt = await (await gateway.handle(
+      new Request(`http://gateway/v1/receipts/${receiptId}`, {
+        headers: { authorization: "Bearer a-test-client-key-that-is-long-enough" },
+      }),
+    )).json();
+    if (receipt.egress !== "completed") {
+      throw new Error("buffered Anthropic emulation was not attested as completed upstream egress");
+    }
   } finally {
     await server.shutdown();
     Deno.env.delete("TEST_ANTHROPIC_STREAM_KEY");
@@ -440,6 +499,135 @@ Deno.test("gateway records failed provider invocation before returning its recei
       receipt.version !== "4" || receipt.egress !== "failed" || checkpoint.sequence !== 1 ||
       receipt.sequence !== 1
     ) throw new Error("failed invocation advanced the chain with an incorrect egress claim");
+  } finally {
+    await server.shutdown();
+  }
+});
+
+Deno.test("gateway bounds buffered provider responses", async () => {
+  await configureTestEnvironment();
+  let resolveAddress!: (port: number) => void;
+  const portPromise = new Promise<number>((resolve) => resolveAddress = resolve);
+  const oversized = new Uint8Array(70 * 1024).fill("x".charCodeAt(0));
+  const server = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: ({ port }) => resolveAddress(port),
+  }, () =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(oversized.subarray(0, 40 * 1024));
+          controller.enqueue(oversized.subarray(40 * 1024));
+          controller.close();
+        },
+      }),
+      { headers: { "content-type": "application/json" } },
+    ));
+  try {
+    const config = testConfig();
+    config.maxResponseBytes = 64 * 1024;
+    config.providers[1]!.baseUrl = `http://127.0.0.1:${await portPromise}/v1`;
+    const gateway = await Gateway.create(config);
+    const response = await gateway.handle(
+      new Request("http://gateway/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer a-test-client-key-that-is-long-enough",
+          "content-type": "application/json",
+          "x-egrysa-provider": "local",
+        },
+        body: JSON.stringify({
+          model: "approved-model",
+          messages: [{ role: "user", content: "ordinary request" }],
+        }),
+      }),
+    );
+    const problem = await response.json();
+    if (
+      response.status !== 502 || typeof problem.receiptId !== "string" ||
+      !String(problem.detail).includes("size limit")
+    ) throw new Error("oversized provider response did not fail with an auditable 502");
+  } finally {
+    await server.shutdown();
+  }
+});
+
+Deno.test("receipt lookup is isolated by authenticated workload", async () => {
+  await configureTestEnvironment();
+  Deno.env.set(
+    "EGRYSA_INBOUND_KEYS",
+    "test-workload=a-test-client-key-that-is-long-enough," +
+      "other-workload=another-client-key-that-is-long-enough",
+  );
+  try {
+    const gateway = await Gateway.create(testConfig());
+    const denied = await gateway.handle(
+      new Request("http://gateway/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer a-test-client-key-that-is-long-enough",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "approved-model",
+          messages: [{ role: "user", content: "Use card 4111 1111 1111 1111" }],
+        }),
+      }),
+    );
+    const receiptId = (await denied.json()).receiptId;
+    const crossWorkload = await gateway.handle(
+      new Request(`http://gateway/v1/receipts/${receiptId}`, {
+        headers: { authorization: "Bearer another-client-key-that-is-long-enough" },
+      }),
+    );
+    if (crossWorkload.status !== 404) {
+      throw new Error("one workload could read another workload's receipt");
+    }
+  } finally {
+    await configureTestEnvironment();
+  }
+});
+
+Deno.test("non-streaming response extensions cannot bypass residue checks", async () => {
+  await configureTestEnvironment();
+  let resolveAddress!: (port: number) => void;
+  const portPromise = new Promise<number>((resolve) => resolveAddress = resolve);
+  const server = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: ({ port }) => resolveAddress(port),
+  }, async (request) => {
+    const parsed = await request.json() as Record<string, unknown>;
+    const content = (parsed.messages as Array<Record<string, string>>)[0]?.content ?? "";
+    const token = content.match(/__EGRYSA_EMAIL_[A-Za-z0-9_]+__/)?.[0] ?? "";
+    return Response.json({
+      id: "extension-residue",
+      choices: [{ index: 0, message: { role: "assistant", content: "completed" } }],
+      vendor_echo: token,
+    });
+  });
+  try {
+    const config = testConfig();
+    config.providers[1]!.baseUrl = `http://127.0.0.1:${await portPromise}/v1`;
+    const gateway = await Gateway.create(config);
+    const response = await gateway.handle(
+      new Request("http://gateway/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer a-test-client-key-that-is-long-enough",
+          "content-type": "application/json",
+          "x-egrysa-provider": "local",
+        },
+        body: JSON.stringify({
+          model: "approved-model",
+          messages: [{ role: "user", content: "Email alex@example.com" }],
+        }),
+      }),
+    );
+    if (response.status !== 502 || !(await response.text()).includes("recomposition_failed")) {
+      throw new Error("surrogate residue in a response extension reached the client");
+    }
   } finally {
     await server.shutdown();
   }

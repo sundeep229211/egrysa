@@ -1,5 +1,8 @@
 import type { ChatMessage, ChatRequest, ProviderConfig, ToolCall } from "./types.ts";
+import { BodySizeLimitError, readBoundedText } from "./bounded.ts";
 import { prepareProviderRequest, ProviderCapabilityError } from "./provider_capabilities.ts";
+
+const DEFAULT_MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
 
 export class ProviderError extends Error {
   constructor(message: string, readonly status = 502) {
@@ -9,7 +12,13 @@ export class ProviderError extends Error {
 
 export type ProviderInvocation =
   | { type: "json"; data: Record<string, unknown>; downgraded: string[] }
-  | { type: "stream"; response: Response; complete: () => void; downgraded: string[] };
+  | {
+    type: "stream";
+    response: Response;
+    complete: () => void;
+    downgraded: string[];
+    emulated: boolean;
+  };
 
 type AdapterInvocation =
   | { type: "json"; data: Record<string, unknown> }
@@ -19,6 +28,7 @@ export async function invokeProvider(
   provider: ProviderConfig,
   request: ChatRequest,
   timeoutMs: number,
+  maxResponseBytes = DEFAULT_MAX_RESPONSE_BYTES,
 ): Promise<ProviderInvocation> {
   if (!provider.allowedModels.includes(request.model)) {
     throw new ProviderError("model is not approved for this provider", 403);
@@ -35,7 +45,12 @@ export async function invokeProvider(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     if (provider.kind === "anthropic") {
-      const data = await invokeAnthropic(provider, effectiveRequest, controller.signal);
+      const data = await invokeAnthropic(
+        provider,
+        effectiveRequest,
+        controller.signal,
+        maxResponseBytes,
+      );
       clearTimeout(timeout);
       if (effectiveRequest.stream) {
         return {
@@ -43,16 +58,23 @@ export async function invokeProvider(
           response: emulateOpenAiStream(data, effectiveRequest.stream_options?.include_usage),
           complete: () => undefined,
           downgraded: prepared.downgraded,
+          emulated: true,
         };
       }
       return { type: "json", data, downgraded: prepared.downgraded };
     }
-    const invocation = await invokeOpenAiCompatible(provider, effectiveRequest, controller.signal);
+    const invocation = await invokeOpenAiCompatible(
+      provider,
+      effectiveRequest,
+      controller.signal,
+      maxResponseBytes,
+    );
     if (invocation.type === "stream") {
       return {
         ...invocation,
         complete: () => clearTimeout(timeout),
         downgraded: prepared.downgraded,
+        emulated: false,
       };
     }
     clearTimeout(timeout);
@@ -67,6 +89,7 @@ async function invokeOpenAiCompatible(
   provider: ProviderConfig,
   request: ChatRequest,
   signal: AbortSignal,
+  maxResponseBytes: number,
 ): Promise<AdapterInvocation> {
   const headers = new Headers({ "content-type": "application/json" });
   const key = provider.apiKeyEnv ? Deno.env.get(provider.apiKeyEnv) : undefined;
@@ -91,13 +114,14 @@ async function invokeOpenAiCompatible(
     }
     return { type: "stream", response, complete: () => undefined };
   }
-  return { type: "json", data: await parseProviderResponse(response) };
+  return { type: "json", data: await parseProviderResponse(response, maxResponseBytes) };
 }
 
 async function invokeAnthropic(
   provider: ProviderConfig,
   request: ChatRequest,
   signal: AbortSignal,
+  maxResponseBytes: number,
 ): Promise<Record<string, unknown>> {
   const key = provider.apiKeyEnv ? Deno.env.get(provider.apiKeyEnv) : undefined;
   if (!key) throw new ProviderError(`credential unavailable for provider ${provider.id}`, 503);
@@ -134,7 +158,7 @@ async function invokeAnthropic(
     signal,
     redirect: "error",
   });
-  const raw = await parseProviderResponse(response);
+  const raw = await parseProviderResponse(response, maxResponseBytes);
   const blocks = Array.isArray(raw.content) ? raw.content as Array<Record<string, unknown>> : [];
   const content = blocks.filter((block) => block.type === "text").map((block) =>
     String(block.text ?? "")
@@ -326,8 +350,19 @@ function mapAnthropicFinishReason(value: unknown): string {
   }
 }
 
-async function parseProviderResponse(response: Response): Promise<Record<string, unknown>> {
-  const text = await response.text();
+async function parseProviderResponse(
+  response: Response,
+  maxResponseBytes: number,
+): Promise<Record<string, unknown>> {
+  let text: string;
+  try {
+    text = await readBoundedText(response, maxResponseBytes);
+  } catch (error) {
+    if (error instanceof BodySizeLimitError) {
+      throw new ProviderError("provider response exceeded the configured size limit");
+    }
+    throw error;
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);

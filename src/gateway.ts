@@ -1,4 +1,5 @@
 import { InboundAuth } from "./auth.ts";
+import { BodySizeLimitError, readBoundedBytes } from "./bounded.ts";
 import { inspectChat, transformChat } from "./chat.ts";
 import { resolveSemanticDetectorConfig } from "./config.ts";
 import { Metrics } from "./metrics.ts";
@@ -11,7 +12,7 @@ import {
 } from "./providers.ts";
 import { ReceiptStore } from "./receipts.ts";
 import { recomposeOpenAiStream, RecompositionError } from "./streaming.ts";
-import { recomposeChecked } from "./surrogate.ts";
+import { hasSurrogateResidueAfterRecomposition, recomposeChecked } from "./surrogate.ts";
 import { createSemanticDetector, REFERENCE_SEMANTIC_DETECTOR_ID } from "./semantic.ts";
 import type { AppConfig, ChatRequest, ReceiptDetector } from "./types.ts";
 
@@ -64,7 +65,9 @@ export class Gateway {
       if (url.pathname === "/v1/receipts/checkpoint") return json(await this.receipts.checkpoint());
       if (url.pathname === "/v1/receipts/public-key") return json(this.receipts.publicKeyInfo());
       const receipt = this.receipts.get(url.pathname.slice("/v1/receipts/".length));
-      return receipt ? json(receipt) : problem(404, "not_found", "Receipt not found.");
+      return receipt?.workloadId === auth.workloadId
+        ? json(receipt)
+        : problem(404, "not_found", "Receipt not found.");
     }
     if (request.method === "GET" && url.pathname === "/v1/models") return this.models();
     if (request.method !== "POST" || url.pathname !== "/v1/chat/completions") {
@@ -195,6 +198,7 @@ export class Gateway {
           policy.provider,
           outbound,
           this.config.requestTimeoutMs,
+          this.config.maxResponseBytes ?? 32 * 1024 * 1024,
         );
       } catch (error) {
         const receipt = await this.receipts.create({ ...receiptContext, egress: "failed" });
@@ -204,7 +208,7 @@ export class Gateway {
       }
       const receipt = await this.receipts.create({
         ...receiptContext,
-        egress: invocation.type === "stream" ? "started" : "completed",
+        egress: invocation.type === "stream" && !invocation.emulated ? "started" : "completed",
       });
       receiptId = receipt.id;
       if (invocation.type === "stream") {
@@ -235,6 +239,10 @@ export class Gateway {
         residueDetected ||= result.residueDetected;
         return result.text;
       });
+      residueDetected ||= hasSurrogateResidueAfterRecomposition(
+        JSON.stringify(recomposed),
+        aggregateMap,
+      );
       if (residueDetected) {
         this.metrics.recompositionFailures++;
         return problem(
@@ -344,11 +352,14 @@ class RequestError extends Error {
 }
 
 async function readJson(request: Request, maxBytes: number): Promise<unknown> {
-  const length = Number(request.headers.get("content-length") ?? 0);
-  if (length > maxBytes) throw new RequestError(413, "Request exceeds the configured size limit.");
-  const bytes = new Uint8Array(await request.arrayBuffer());
-  if (bytes.byteLength > maxBytes) {
-    throw new RequestError(413, "Request exceeds the configured size limit.");
+  let bytes: Uint8Array;
+  try {
+    bytes = await readBoundedBytes(request, maxBytes);
+  } catch (error) {
+    if (error instanceof BodySizeLimitError) {
+      throw new RequestError(413, "Request exceeds the configured size limit.");
+    }
+    throw error;
   }
   try {
     return JSON.parse(new TextDecoder().decode(bytes));
@@ -378,7 +389,9 @@ function validateChat(value: unknown): string | null {
   if (Object.keys(body).some((key) => !allowedRequestFields.has(key))) {
     return "Request contains unsupported fields.";
   }
-  if (typeof body.model !== "string" || !body.model) return "model is required.";
+  if (typeof body.model !== "string" || !body.model || body.model.length > 256) {
+    return "model must contain 1 to 256 characters.";
+  }
   if (!Array.isArray(body.messages) || body.messages.length === 0 || body.messages.length > 256) {
     return "messages must contain 1 to 256 items.";
   }

@@ -6,8 +6,9 @@ send customer prompts, production credentials as content, or telemetry to Egrysa
 
 ## Run a report
 
-1. Add the provider endpoint, credential environment-variable name, model allowlist, and reviewed
-   data policy to a local config. Do not commit credentials.
+1. Copy `config/egrysa.example.json`, then add the provider endpoint, credential
+   environment-variable name, model allowlist, and reviewed data policy to that full gateway config.
+   Do not commit credentials.
 2. Start the provider if it is customer-hosted.
 3. Run:
 

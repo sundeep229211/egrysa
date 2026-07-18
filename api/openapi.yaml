@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Egrysa Gateway API
-  version: 0.1.0
+  version: 0.1.0-alpha.1
   description: OpenAI-compatible text, streaming, and function-tool AI egress control boundary.
 servers:
   - url: http://127.0.0.1:8787
@@ -63,10 +63,14 @@ paths:
             application/json: { schema: { type: object } }
             text/event-stream: { schema: { type: string } }
         "401": { $ref: "#/components/responses/Problem" }
+        "400": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+        "504": { $ref: "#/components/responses/Problem" }
   /v1/receipts/{id}:
     get:
       operationId: getReceipt
@@ -105,7 +109,7 @@ components:
       additionalProperties: false
       required: [model, messages]
       properties:
-        model: { type: string }
+        model: { type: string, minLength: 1, maxLength: 256 }
         messages:
           type: array
           minItems: 1
@@ -175,11 +179,13 @@ components:
         workloadId,
         requestFingerprint,
         decision,
+        provider,
         model,
         findingCounts,
         transformedFields,
         rawContentPersisted,
         providerStoreRequested,
+        previousReceiptHash,
         receiptHash,
         signingKeyId,
         signature,
@@ -214,7 +220,7 @@ components:
           description: True when semantic detection failed and no semantic findings were used.
         egress:
           enum: [completed, failed, started]
-          description: Present and required for version 4. Streaming receipts attest started egress only.
+          description: Present and required for version 4. Native streaming receipts attest started egress; buffered emulation records completed upstream egress.
         rawContentPersisted: { const: false }
         providerStoreRequested: { const: false }
         previousReceiptHash: { type: [string, "null"] }

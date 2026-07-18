@@ -26,6 +26,15 @@ public tag.
 
 ### Changed
 
+- All attacker-influenceable buffered reads now use explicit limits: incremental request/provider
+  body bounds, capped SSE event assembly, bounded semantic occurrence expansion, and linear-sweep
+  overlap resolution.
+- Receipt reads are workload-isolated; model IDs are bounded; non-streaming responses receive a
+  serialized residue backstop; emulated streams attest completed upstream egress; and transformation
+  rejects overlapping findings defensively.
+- Publication evidence and API/support documentation now match the announce tree, planned tag,
+  enabled repository features, detector identifiers, key-generation output, and documented residual
+  rate-limit, IPv6, streaming-residue, and rotated-archive risks.
 - Receipt startup now refuses to create a duplicate sequence space when rotated history exists but
   the active head log is missing or empty after an interrupted rotation.
 - Provider adapters now enforce explicit capability profiles, allow validated narrowing overrides,

@@ -41,6 +41,10 @@ export function validateConfig(config: AppConfig): void {
   if (config.maxRequestBytes < 1024 || config.maxRequestBytes > 10 * 1024 * 1024) {
     throw new Error("maxRequestBytes must be between 1 KiB and 10 MiB");
   }
+  const maxResponseBytes = config.maxResponseBytes ?? 32 * 1024 * 1024;
+  if (!Number.isInteger(maxResponseBytes) || maxResponseBytes < 64 * 1024) {
+    throw new Error("maxResponseBytes must be at least 64 KiB");
+  }
   if (
     !Number.isInteger(config.requestTimeoutMs) || config.requestTimeoutMs < 100 ||
     config.requestTimeoutMs > 300_000

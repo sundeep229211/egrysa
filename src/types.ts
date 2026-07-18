@@ -85,6 +85,7 @@ export interface SemanticDetectorConfig {
 export interface AppConfig {
   listen: { hostname: string; port: number };
   maxRequestBytes: number;
+  maxResponseBytes?: number;
   requestTimeoutMs: number;
   receiptCapacity: number;
   receiptLogPath: string;

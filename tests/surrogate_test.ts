@@ -39,3 +39,16 @@ Deno.test("recomposition catches residue with the full leading prefix stripped",
     throw new Error("ordinary product-name prose was mistaken for surrogate residue");
   }
 });
+
+Deno.test("transformation rejects overlapping findings defensively", () => {
+  let rejected = false;
+  try {
+    transform("alex@example.com", [
+      { kind: "email", start: 0, end: 16, value: "alex@example.com" },
+      { kind: "person_name", start: 0, end: 4, value: "alex" },
+    ], new Set(["email", "person_name"]));
+  } catch (error) {
+    rejected = error instanceof Error && error.message.includes("overlap");
+  }
+  if (!rejected) throw new Error("overlapping transformation findings were accepted");
+});

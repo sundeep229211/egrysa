@@ -38,7 +38,7 @@ training settings are policy inputs that must be validated through contract and 
   recomposition ([adapter code](src/providers.ts), [stream tests](tests/providers_test.ts)).
 - Function-tool definitions, assistant tool calls, and tool results as inspected text surfaces;
   Egrysa does not execute tools.
-- Deterministic detection for emails, phones, IP addresses, IBANs, payment cards, hyphenated US
+- Deterministic detection for emails, phones, IPv4 addresses, IBANs, payment cards, hyphenated US
   SSNs, private keys, common API secrets, and configured confidential terms.
 - An off-by-default reference semantic detector calling only a configured local OpenAI-compatible
   endpoint for person names, physical addresses, and semantically confidential content. It is
@@ -92,6 +92,7 @@ provider/model/version, not a universal compatibility claim. See
 - No transparent employee identity header is forwarded to providers.
 - Contiguous nine-digit values are not classified as SSNs. Deny-class SSN detection requires the
   canonical hyphenated form to avoid blocking ordinary identifiers.
+- IPv6 addresses are not detected in this release.
 - No remote semantic-detector option. Model findings are low precision, must match the source text
   literally, and never replace deterministic detection as the fail-closed floor.
 
@@ -108,8 +109,8 @@ assurance. It must not depend on observing customer prompt content.
 
 ## Local evaluation
 
-Requirements: Deno 2.9.2 and Ollama for the default local path. The repository has no external code
-dependencies.
+Requirements: Deno 2.9.x (CI pins 2.9.2) and Ollama for the default local path. The repository has
+no external code dependencies.
 
 1. Start Ollama:
 
@@ -134,11 +135,14 @@ dependencies.
    The generated local-only file contains:
 
    ```text
+   EGRYSA_CONFIG=config/egrysa.example.json
    EGRYSA_INBOUND_KEYS=example-workload=<client bearer key>
    EGRYSA_CLIENT_KEY=<same client bearer key>
    EGRYSA_RECEIPT_FINGERPRINT_KEY=<request-fingerprint key>
    EGRYSA_RECEIPT_ED25519_PRIVATE_KEY=<base64 PKCS8 private key>
    EGRYSA_RECEIPT_ED25519_PUBLIC_KEY=<base64 SPKI public key>
+   OPENAI_API_KEY=
+   ANTHROPIC_API_KEY=
    ```
 
 3. Review `config/egrysa.example.json`. The quickstart request below explicitly selects the
