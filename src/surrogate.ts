@@ -34,6 +34,7 @@ export function transform(
       a.start - b.start
     )
   ) {
+    if (finding.start < cursor) throw new Error("transformation findings overlap");
     output += text.slice(cursor, finding.start);
     const identity = `${finding.kind}:${finding.value}`;
     let token = state.reusable.get(identity);
@@ -75,6 +76,21 @@ export function hasSurrogateResidue(
   for (const token of mapping.keys()) unknown = unknown.replaceAll(token, "");
   unknown = unknown.replace(/\s+/g, "");
   return complete
-    ? /_+egrysa[_-][\w-]{4,128}/i.test(unknown)
-    : /_+egrysa[_-][\w-]{1,128}[_-]{2}/i.test(unknown);
+    ? /(?:_+egrysa[_-][\w-]{4,128}|\begrysa[_-][\w-]{4,128})/i.test(unknown)
+    : /(?:_+egrysa[_-][\w-]{1,128}[_-]{2}|\begrysa[_-][\w-]{1,128}[_-]{2})/i.test(
+      unknown,
+    );
+}
+
+export function hasSurrogateResidueAfterRecomposition(
+  text: string,
+  mapping: ReadonlyMap<string, string>,
+): boolean {
+  if (mapping.size === 0) return false;
+  let audit = text;
+  for (const original of mapping.values()) {
+    if (original) audit = audit.replaceAll(original, "");
+  }
+  audit = audit.replace(/\s+/g, "");
+  return /(?:_+egrysa[_-][\w-]{4,128}|\begrysa[_-][\w-]{4,128})/i.test(audit);
 }

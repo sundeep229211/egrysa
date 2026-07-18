@@ -65,7 +65,7 @@ const semantic = await runSemanticEvaluation(
   await loadSemanticEvalCases(),
   offlineSemanticEvalDetector(),
   "offline",
-  "egrysa-semantic-stub@1.0.0",
+  "egrysa.eval.semantic-stub@1.0.0",
 );
 const perKind = Object.fromEntries(
   Object.entries(counts).map(([kind, value]) => {

@@ -2,7 +2,8 @@
 
 Egrysa is maintainer-led during the alpha stage. Maintainers are responsible for product scope,
 security decisions, releases, and final merge authority. Material decisions should be made in public
-issues or architecture decision records unless disclosure would create security risk.
+issues or architecture decision records unless disclosure would create security risk. GitHub
+Discussions is not enabled for the alpha.
 
 ## Decision principles
 

@@ -28,7 +28,8 @@ Deno.test("semantic timeout degrades to deterministic-only with content-free evi
       }
       const receipt = JSON.parse(receiptText);
       if (
-        receipt.version !== "3" || receipt.detectorDegraded !== true ||
+        receipt.version !== "4" || receipt.egress !== "completed" ||
+        receipt.detectorDegraded !== true ||
         !receipt.detectors.some((item: Record<string, unknown>) =>
           item.id === "egrysa.reference.local-semantic"
         )
@@ -156,6 +157,49 @@ Deno.test("low-precision semantic finding in a structural key routes locally", a
     await server.shutdown();
   }
 });
+
+for (const onFailure of ["degrade", "deny"] as const) {
+  Deno.test(`semantic finding explosion follows ${onFailure} failure policy`, async () => {
+    await configureTestEnvironment();
+    let resolvePort!: (port: number) => void;
+    const port = new Promise<number>((resolve) => resolvePort = resolve);
+    let providerCalls = 0;
+    const server = Deno.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      onListen: ({ port }) => resolvePort(port),
+    }, async (request) => {
+      const body = await request.json() as Record<string, unknown>;
+      const messages = body.messages as Array<Record<string, unknown>>;
+      if (String(messages[0]?.content).includes(SEMANTIC_PROMPT_VERSION)) {
+        return completion(JSON.stringify({
+          findings: [{ kind: "person_name", text: "ab", confidence: 0.8 }],
+        }));
+      }
+      providerCalls++;
+      return completion("local inference completed");
+    });
+    try {
+      const gateway = await Gateway.create(
+        semanticConfig(`http://127.0.0.1:${await port}/v1`, onFailure),
+      );
+      const response = await gateway.handle(chatRequest(`Review ${"ab ".repeat(70)}`));
+      const expectedStatus = onFailure === "degrade" ? 200 : 403;
+      const expectedCalls = onFailure === "degrade" ? 1 : 0;
+      if (response.status !== expectedStatus || providerCalls !== expectedCalls) {
+        throw new Error(`oversized findings did not follow ${onFailure} policy`);
+      }
+      const receiptId = response.headers.get("x-egrysa-receipt") ??
+        (await response.json()).receiptId;
+      const receipt = await (await gateway.handle(receiptRequest(receiptId))).json();
+      if (receipt.detectorDegraded !== true) {
+        throw new Error("oversized semantic findings were not recorded as degradation");
+      }
+    } finally {
+      await server.shutdown();
+    }
+  });
+}
 
 function semanticConfig(baseUrl: string, onFailure: "degrade" | "deny") {
   const config = testConfig();

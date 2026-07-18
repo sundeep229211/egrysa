@@ -2,11 +2,13 @@ import {
   type AppConfig,
   FINDING_KINDS,
   type FindingKind,
+  PROVIDER_CAPABILITY_KEYS,
   type ProviderConfig,
   SEMANTIC_FINDING_KINDS,
   type SemanticDetectorConfig,
   type SemanticFindingKind,
 } from "./types.ts";
+import { PROVIDER_CAPABILITY_TABLE } from "./provider_capabilities.ts";
 
 const DEFAULT_PATH = "config/egrysa.example.json";
 
@@ -15,6 +17,7 @@ export interface ResolvedSemanticDetectorConfig {
   providerId: string;
   model: string;
   timeoutMs: number;
+  totalTimeoutMs: number;
   maxInputBytes: number;
   onDetectorFailure: "degrade" | "deny";
   kinds: SemanticFindingKind[];
@@ -38,6 +41,10 @@ export function validateConfig(config: AppConfig): void {
   if (config.maxRequestBytes < 1024 || config.maxRequestBytes > 10 * 1024 * 1024) {
     throw new Error("maxRequestBytes must be between 1 KiB and 10 MiB");
   }
+  const maxResponseBytes = config.maxResponseBytes ?? 32 * 1024 * 1024;
+  if (!Number.isInteger(maxResponseBytes) || maxResponseBytes < 64 * 1024) {
+    throw new Error("maxResponseBytes must be at least 64 KiB");
+  }
   if (
     !Number.isInteger(config.requestTimeoutMs) || config.requestTimeoutMs < 100 ||
     config.requestTimeoutMs > 300_000
@@ -48,6 +55,13 @@ export function validateConfig(config: AppConfig): void {
   ) throw new Error("receiptCapacity must be between 1 and 1000000");
   if (typeof config.receiptLogPath !== "string" || !config.receiptLogPath.trim()) {
     throw new Error("receiptLogPath must be a non-empty path");
+  }
+  const receiptMaxLogBytes = config.receiptMaxLogBytes ?? 64 * 1024 * 1024;
+  if (
+    !Number.isInteger(receiptMaxLogBytes) || receiptMaxLogBytes < 1024 ||
+    receiptMaxLogBytes > 1024 * 1024 * 1024
+  ) {
+    throw new Error("receiptMaxLogBytes must be between 1 KiB and 1 GiB");
   }
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(config.receiptChainId)) {
     throw new Error("receiptChainId must be a stable identifier");
@@ -83,7 +97,8 @@ export function resolveSemanticDetectorConfig(config: AppConfig): ResolvedSemant
     enabled: detector?.enabled ?? false,
     providerId: detector?.providerId ?? config.policy.localProvider,
     model: detector?.model ?? "gpt-oss:20b",
-    timeoutMs: detector?.timeoutMs ?? 2_000,
+    timeoutMs: detector?.timeoutMs ?? 10_000,
+    totalTimeoutMs: detector?.totalTimeoutMs ?? 30_000,
     maxInputBytes: detector?.maxInputBytes ?? 16_384,
     onDetectorFailure: detector?.onDetectorFailure ?? "degrade",
     kinds: [...(detector?.kinds ?? SEMANTIC_FINDING_KINDS)],
@@ -118,6 +133,15 @@ export function validateSemanticDetectorConfig(config: AppConfig): void {
     detector.timeoutMs > 300_000
   ) {
     throw new Error("semanticDetector.timeoutMs must be between 100 ms and 5 minutes");
+  }
+  if (
+    !Number.isInteger(detector.totalTimeoutMs) || detector.totalTimeoutMs < 100 ||
+    detector.totalTimeoutMs > 300_000
+  ) {
+    throw new Error("semanticDetector.totalTimeoutMs must be between 100 ms and 5 minutes");
+  }
+  if (detector.totalTimeoutMs < detector.timeoutMs) {
+    throw new Error("semanticDetector.totalTimeoutMs must be at least timeoutMs");
   }
   if (
     !Number.isInteger(detector.maxInputBytes) || detector.maxInputBytes < 256 ||
@@ -215,4 +239,25 @@ function validateProvider(provider: ProviderConfig): void {
     ) || !["none", "standard", "unknown"].includes(provider.dataPolicy.retention) ||
     typeof provider.dataPolicy.allowRaw !== "boolean"
   ) throw new Error(`provider ${provider.id} requires an explicit dataPolicy`);
+  if (provider.capabilities !== undefined) {
+    if (
+      !provider.capabilities || typeof provider.capabilities !== "object" ||
+      Array.isArray(provider.capabilities)
+    ) throw new Error(`provider ${provider.id} capabilities must be an object`);
+    const known = new Set<string>(PROVIDER_CAPABILITY_KEYS);
+    for (const [key, value] of Object.entries(provider.capabilities)) {
+      if (!known.has(key)) {
+        throw new Error(`provider ${provider.id} has unknown capability: ${key}`);
+      }
+      if (typeof value !== "boolean") {
+        throw new Error(`provider ${provider.id} capability ${key} must be boolean`);
+      }
+      if (
+        value &&
+        !PROVIDER_CAPABILITY_TABLE[provider.kind][key as keyof typeof provider.capabilities]
+      ) {
+        throw new Error(`provider ${provider.id} cannot enable unsupported capability: ${key}`);
+      }
+    }
+  }
 }

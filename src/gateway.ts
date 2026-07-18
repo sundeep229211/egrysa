@@ -1,12 +1,18 @@
 import { InboundAuth } from "./auth.ts";
+import { BodySizeLimitError, readBoundedBytes } from "./bounded.ts";
 import { inspectChat, transformChat } from "./chat.ts";
 import { resolveSemanticDetectorConfig } from "./config.ts";
 import { Metrics } from "./metrics.ts";
 import { decide } from "./policy.ts";
-import { invokeProvider, mapResponseContent, ProviderError } from "./providers.ts";
+import {
+  invokeProvider,
+  mapResponseContent,
+  ProviderError,
+  type ProviderInvocation,
+} from "./providers.ts";
 import { ReceiptStore } from "./receipts.ts";
 import { recomposeOpenAiStream, RecompositionError } from "./streaming.ts";
-import { recomposeChecked } from "./surrogate.ts";
+import { hasSurrogateResidueAfterRecomposition, recomposeChecked } from "./surrogate.ts";
 import { createSemanticDetector, REFERENCE_SEMANTIC_DETECTOR_ID } from "./semantic.ts";
 import type { AppConfig, ChatRequest, ReceiptDetector } from "./types.ts";
 
@@ -31,8 +37,13 @@ export class Gateway {
         chainId: config.receiptChainId,
         logPath: config.receiptLogPath,
         capacity: config.receiptCapacity,
+        maxLogBytes: config.receiptMaxLogBytes ?? 64 * 1024 * 1024,
       }),
     );
+  }
+
+  close(): Promise<void> {
+    return this.receipts.close();
   }
 
   async handle(request: Request): Promise<Response> {
@@ -54,7 +65,9 @@ export class Gateway {
       if (url.pathname === "/v1/receipts/checkpoint") return json(await this.receipts.checkpoint());
       if (url.pathname === "/v1/receipts/public-key") return json(this.receipts.publicKeyInfo());
       const receipt = this.receipts.get(url.pathname.slice("/v1/receipts/".length));
-      return receipt ? json(receipt) : problem(404, "not_found", "Receipt not found.");
+      return receipt?.workloadId === auth.workloadId
+        ? json(receipt)
+        : problem(404, "not_found", "Receipt not found.");
     }
     if (request.method === "GET" && url.pathname === "/v1/models") return this.models();
     if (request.method !== "POST" || url.pathname !== "/v1/chat/completions") {
@@ -67,6 +80,7 @@ export class Gateway {
     this.metrics.requests++;
     this.metrics.inFlight++;
     let receiptId: string | undefined;
+    let providerInvocationFailed = false;
     try {
       const body = await readJson(request, this.config.maxRequestBytes);
       const validation = validateChat(body);
@@ -168,7 +182,7 @@ export class Gateway {
         this.metrics.transformed++;
       }
 
-      const receipt = await this.receipts.create({
+      const receiptContext = {
         requestCanonical: originalJson,
         workloadId,
         decision: policy.decision,
@@ -177,13 +191,26 @@ export class Gateway {
         findings,
         transformedFields,
         ...detectorReceipt,
+      };
+      let invocation: ProviderInvocation;
+      try {
+        invocation = await invokeProvider(
+          policy.provider,
+          outbound,
+          this.config.requestTimeoutMs,
+          this.config.maxResponseBytes ?? 32 * 1024 * 1024,
+        );
+      } catch (error) {
+        const receipt = await this.receipts.create({ ...receiptContext, egress: "failed" });
+        receiptId = receipt.id;
+        providerInvocationFailed = true;
+        throw error;
+      }
+      const receipt = await this.receipts.create({
+        ...receiptContext,
+        egress: invocation.type === "stream" && !invocation.emulated ? "started" : "completed",
       });
       receiptId = receipt.id;
-      const invocation = await invokeProvider(
-        policy.provider,
-        outbound,
-        this.config.requestTimeoutMs,
-      );
       if (invocation.type === "stream") {
         const stream = recomposeOpenAiStream(
           invocation.response.body!,
@@ -201,6 +228,7 @@ export class Gateway {
             "x-accel-buffering": "no",
             "x-egrysa-receipt": receipt.id,
             "x-egrysa-decision": policy.decision,
+            ...downgradeHeaders(invocation.downgraded),
             ...securityHeaders(),
           },
         });
@@ -211,6 +239,10 @@ export class Gateway {
         residueDetected ||= result.residueDetected;
         return result.text;
       });
+      residueDetected ||= hasSurrogateResidueAfterRecomposition(
+        JSON.stringify(recomposed),
+        aggregateMap,
+      );
       if (residueDetected) {
         this.metrics.recompositionFailures++;
         return problem(
@@ -223,6 +255,7 @@ export class Gateway {
       return json(recomposed, 200, {
         "x-egrysa-receipt": receipt.id,
         "x-egrysa-decision": policy.decision,
+        ...downgradeHeaders(invocation.downgraded),
       });
     } catch (error) {
       if (error instanceof ProviderError) {
@@ -230,10 +263,24 @@ export class Gateway {
         return problem(error.status, "provider_error", error.message, receiptId);
       }
       if (error instanceof DOMException && error.name === "AbortError") {
-        return problem(504, "provider_timeout", "The provider exceeded the configured deadline.");
+        return problem(
+          504,
+          "provider_timeout",
+          "The provider exceeded the configured deadline.",
+          receiptId,
+        );
       }
       if (error instanceof RequestError) {
         return problem(error.status, "invalid_request", error.message);
+      }
+      if (providerInvocationFailed) {
+        this.metrics.providerErrors++;
+        return problem(
+          502,
+          "provider_error",
+          "The provider invocation failed.",
+          receiptId,
+        );
       }
       console.error(
         JSON.stringify({
@@ -305,11 +352,14 @@ class RequestError extends Error {
 }
 
 async function readJson(request: Request, maxBytes: number): Promise<unknown> {
-  const length = Number(request.headers.get("content-length") ?? 0);
-  if (length > maxBytes) throw new RequestError(413, "Request exceeds the configured size limit.");
-  const bytes = new Uint8Array(await request.arrayBuffer());
-  if (bytes.byteLength > maxBytes) {
-    throw new RequestError(413, "Request exceeds the configured size limit.");
+  let bytes: Uint8Array;
+  try {
+    bytes = await readBoundedBytes(request, maxBytes);
+  } catch (error) {
+    if (error instanceof BodySizeLimitError) {
+      throw new RequestError(413, "Request exceeds the configured size limit.");
+    }
+    throw error;
   }
   try {
     return JSON.parse(new TextDecoder().decode(bytes));
@@ -339,7 +389,9 @@ function validateChat(value: unknown): string | null {
   if (Object.keys(body).some((key) => !allowedRequestFields.has(key))) {
     return "Request contains unsupported fields.";
   }
-  if (typeof body.model !== "string" || !body.model) return "model is required.";
+  if (typeof body.model !== "string" || !body.model || body.model.length > 256) {
+    return "model must contain 1 to 256 characters.";
+  }
   if (!Array.isArray(body.messages) || body.messages.length === 0 || body.messages.length > 256) {
     return "messages must contain 1 to 256 items.";
   }
@@ -498,6 +550,10 @@ function securityHeaders(): HeadersInit {
     "referrer-policy": "no-referrer",
     "content-security-policy": "default-src 'none'",
   };
+}
+
+function downgradeHeaders(fields: string[]): HeadersInit {
+  return fields.length === 0 ? {} : { "x-egrysa-downgraded": fields.join(",") };
 }
 
 function json(value: unknown, status = 200, extra: HeadersInit = {}): Response {

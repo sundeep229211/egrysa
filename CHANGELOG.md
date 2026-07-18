@@ -7,6 +7,8 @@ public tag.
 
 ### Added
 
+- Provider conformance harness with deterministic wire checks, informational surrogate-fidelity
+  evidence, dated JSON reports, and a generated README support matrix.
 - OpenAI-compatible text gateway with deterministic policy decisions.
 - Authenticated model discovery, OpenAI-compatible SSE streaming, and bounded function tools.
 - OpenAI, Anthropic, and local OpenAI-compatible adapters.
@@ -24,6 +26,34 @@ public tag.
 
 ### Changed
 
+- All attacker-influenceable buffered reads now use explicit limits: incremental request/provider
+  body bounds, capped SSE event assembly, and bounded semantic occurrence expansion.
+- Overlap resolution now applies the original global winner priority with logarithmic
+  predecessor/successor selection, preserving a maximal non-overlapping finding set.
+- Receipt reads are workload-isolated; model IDs are bounded; non-streaming responses receive a
+  serialized residue backstop; emulated streams attest completed upstream egress; and transformation
+  rejects overlapping findings defensively.
+- Publication evidence and API/support documentation now match the announce tree, planned tag,
+  enabled repository features, detector identifiers, key-generation output, and documented residual
+  rate-limit, IPv6, streaming-residue, and rotated-archive risks.
+- Receipt startup now refuses to create a duplicate sequence space when rotated history exists but
+  the active head log is missing or empty after an interrupted rotation.
+- Provider adapters now enforce explicit capability profiles, allow validated narrowing overrides,
+  disclose dropped tuning fields in `x-egrysa-downgraded`, and reject semantic mismatches with 422.
+- Anthropic streaming is emulated as stable OpenAI SSE frames, including tool-call deltas and
+  optional usage, and is disclosed as `stream-emulated` rather than presented as incremental
+  streaming.
+- Publication-facing architecture, operations, conformance, and quickstart documentation now links
+  neutrality and receipt claims to their implementation and runnable evidence.
+- Provider-attempt receipts now use a strict version-4 shape with `completed`, `failed`, or
+  streaming `started` egress outcome; deny receipts and existing version-2/version-3 verification
+  remain unchanged.
+- Receipt logs now fsync each append, rotate at the configured size into sequence-suffixed archives,
+  and resume active-chain continuity from a verified signed checkpoint.
+- Semantic detection now applies a 10-second default per-chunk timeout and a separately validated
+  30-second total surface budget so sequential chunks do not share one per-call deadline.
+- Surrogate residue checks now fail closed on token-shaped `EGRYSA_...` fragments whose full leading
+  underscore prefix was removed, without rejecting ordinary product-name prose.
 - Selected Egrysa as the product, package, API namespace, configuration, deployment, and release
   name before the first public tag.
 - Added a container-specific configuration so the image listens on its container interface while

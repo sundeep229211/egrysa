@@ -26,3 +26,29 @@ Deno.test("recomposition reports provider-mutated surrogate residue", () => {
     throw new Error("mutated surrogate residue was not detected");
   }
 });
+
+Deno.test("recomposition catches residue with the full leading prefix stripped", () => {
+  const token = "__EGRYSA_EMAIL_0001_aabbccddeeff__";
+  const mapping = new Map([[token, "a@example.com"]]);
+  const result = recomposeChecked("EGRYSA_PII_0__", mapping);
+  if (!result.residueDetected) {
+    throw new Error("bare surrogate residue was not detected");
+  }
+  const prose = recomposeChecked("Egrysa is a gateway", mapping);
+  if (prose.residueDetected || prose.text !== "Egrysa is a gateway") {
+    throw new Error("ordinary product-name prose was mistaken for surrogate residue");
+  }
+});
+
+Deno.test("transformation rejects overlapping findings defensively", () => {
+  let rejected = false;
+  try {
+    transform("alex@example.com", [
+      { kind: "email", start: 0, end: 16, value: "alex@example.com" },
+      { kind: "person_name", start: 0, end: 4, value: "alex" },
+    ], new Set(["email", "person_name"]));
+  } catch (error) {
+    rejected = error instanceof Error && error.message.includes("overlap");
+  }
+  if (!rejected) throw new Error("overlapping transformation findings were accepted");
+});

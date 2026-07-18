@@ -42,6 +42,24 @@ export interface DataPolicy {
   allowRaw: boolean;
 }
 
+export const PROVIDER_CAPABILITY_KEYS = [
+  "temperature",
+  "max_tokens",
+  "seed",
+  "top_p",
+  "frequency_penalty",
+  "presence_penalty",
+  "tools",
+  "tool_choice",
+  "parallel_tool_calls",
+  "stream",
+  "stream_options",
+] as const;
+
+export type ProviderCapabilityKey = typeof PROVIDER_CAPABILITY_KEYS[number];
+export type ProviderCapabilities = Record<ProviderCapabilityKey, boolean>;
+export type ProviderCapabilityOverrides = Partial<Record<ProviderCapabilityKey, boolean>>;
+
 export interface ProviderConfig {
   id: string;
   kind: "openai" | "anthropic" | "openai-compatible";
@@ -49,6 +67,7 @@ export interface ProviderConfig {
   apiKeyEnv?: string;
   allowedModels: string[];
   local?: boolean;
+  capabilities?: ProviderCapabilityOverrides;
   dataPolicy: DataPolicy;
 }
 
@@ -57,6 +76,7 @@ export interface SemanticDetectorConfig {
   providerId?: string;
   model?: string;
   timeoutMs?: number;
+  totalTimeoutMs?: number;
   maxInputBytes?: number;
   onDetectorFailure?: "degrade" | "deny";
   kinds?: SemanticFindingKind[];
@@ -65,9 +85,11 @@ export interface SemanticDetectorConfig {
 export interface AppConfig {
   listen: { hostname: string; port: number };
   maxRequestBytes: number;
+  maxResponseBytes?: number;
   requestTimeoutMs: number;
   receiptCapacity: number;
   receiptLogPath: string;
+  receiptMaxLogBytes?: number;
   receiptChainId: string;
   providers: ProviderConfig[];
   semanticDetector?: SemanticDetectorConfig;
@@ -162,7 +184,16 @@ export interface PrivacyReceiptV3 extends PrivacyReceiptBase {
   detectorDegraded: boolean;
 }
 
-export type PrivacyReceipt = PrivacyReceiptV2 | PrivacyReceiptV3;
+export type EgressOutcome = "completed" | "failed" | "started";
+
+export interface PrivacyReceiptV4 extends PrivacyReceiptBase {
+  version: "4";
+  egress: EgressOutcome;
+  detectors?: ReceiptDetector[];
+  detectorDegraded?: boolean;
+}
+
+export type PrivacyReceipt = PrivacyReceiptV2 | PrivacyReceiptV3 | PrivacyReceiptV4;
 
 export interface ReceiptCheckpoint {
   version: "1";

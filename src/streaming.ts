@@ -2,6 +2,8 @@ import { hasSurrogateResidue } from "./surrogate.ts";
 
 export class RecompositionError extends Error {}
 
+const MAX_SSE_EVENT_BYTES = 4 * 1024 * 1024;
+
 export function recomposeOpenAiStream(
   upstream: ReadableStream<Uint8Array>,
   mapping: ReadonlyMap<string, string>,
@@ -13,6 +15,8 @@ export function recomposeOpenAiStream(
   const reader = upstream.getReader();
   const states = new Map<string, BufferedRecomposer>();
   let input = "";
+  let bufferedBytes = 0;
+  let scanFrom = 0;
   let template: Record<string, unknown> | null = null;
   let upstreamDone = false;
   let completed = false;
@@ -29,19 +33,44 @@ export function recomposeOpenAiStream(
       try {
         while (output.length === 0 && !upstreamDone) {
           const { value, done } = await reader.read();
+          bufferedBytes += value?.byteLength ?? 0;
           input += decoder.decode(value, { stream: !done });
           while (true) {
-            const boundary = nextEventBoundary(input);
-            if (!boundary) break;
+            const boundary = nextEventBoundary(input, scanFrom);
+            if (!boundary) {
+              scanFrom = Math.max(0, input.length - 3);
+              if (bufferedBytes > MAX_SSE_EVENT_BYTES) {
+                throw new Error("provider SSE event exceeded the size limit");
+              }
+              break;
+            }
             const frame = input.slice(0, boundary.index);
+            if (encoder.encode(frame).byteLength > MAX_SSE_EVENT_BYTES) {
+              throw new Error("provider SSE event exceeded the size limit");
+            }
+            const consumed = input.slice(0, boundary.index + boundary.length);
+            bufferedBytes = Math.max(0, bufferedBytes - encoder.encode(consumed).byteLength);
             input = input.slice(boundary.index + boundary.length);
-            const event = processFrame(frame, states, mapping, (value) => template = value);
+            scanFrom = 0;
+            const event = processFrame(
+              frame,
+              states,
+              mapping,
+              template,
+              (value) => template = value,
+            );
             if (event) output.push(event);
           }
           if (!done) continue;
           upstreamDone = true;
           if (input.trim()) {
-            const event = processFrame(input, states, mapping, (value) => template = value);
+            const event = processFrame(
+              input,
+              states,
+              mapping,
+              template,
+              (value) => template = value,
+            );
             if (event) output.push(event);
           }
           const tail = flushAll(states, template);
@@ -93,6 +122,7 @@ class BufferedRecomposer {
     this.#replaceKnown();
     if (this.#buffer.length <= this.#holdback) return "";
     const cut = this.#buffer.length - this.#holdback;
+    this.#assertNoSurrogatePrefixBefore(cut);
     const output = this.#buffer.slice(0, cut);
     this.#buffer = this.#buffer.slice(cut);
     return output;
@@ -101,6 +131,7 @@ class BufferedRecomposer {
   flush(): string {
     this.#assertSafe(true);
     this.#replaceKnown();
+    this.#assertNoSurrogatePrefixBefore(Number.POSITIVE_INFINITY);
     const output = this.#buffer;
     this.#buffer = "";
     return output;
@@ -117,19 +148,33 @@ class BufferedRecomposer {
       this.#buffer = this.#buffer.replaceAll(token, original);
     }
   }
+
+  #assertNoSurrogatePrefixBefore(boundary: number): void {
+    if (this.mapping.size === 0) return;
+    let audit = this.#buffer;
+    for (const original of this.mapping.values()) {
+      if (original) audit = audit.replaceAll(original, "\0".repeat(original.length));
+    }
+    for (const match of audit.matchAll(/(?:_+egrysa[_-]|\begrysa[_-][\w-]{4,128})/gi)) {
+      if ((match.index ?? Number.POSITIVE_INFINITY) < boundary) {
+        throw new RecompositionError("provider damaged a surrogate token");
+      }
+    }
+  }
 }
 
 function processFrame(
   frame: string,
   states: Map<string, BufferedRecomposer>,
   mapping: ReadonlyMap<string, string>,
+  template: Record<string, unknown> | null,
   setTemplate: (value: Record<string, unknown>) => void,
 ): string {
   const data = frame.split(/\r?\n/).filter((line) => line.startsWith("data:"))
     .map((line) => line.slice(5).trimStart()).join("\n");
   if (!data) return "";
   if (data === "[DONE]") {
-    const tail = flushAll(states, null);
+    const tail = flushAll(states, template);
     return `${tail ? `data: ${JSON.stringify(tail)}\n\n` : ""}data: [DONE]\n\n`;
   }
   let parsed: unknown;
@@ -238,7 +283,12 @@ function state(
   return value;
 }
 
-function nextEventBoundary(value: string): { index: number; length: number } | null {
-  const match = /\r?\n\r?\n/.exec(value);
-  return match ? { index: match.index, length: match[0].length } : null;
+function nextEventBoundary(
+  value: string,
+  fromIndex: number,
+): { index: number; length: number } | null {
+  const match = /\r?\n\r?\n/g;
+  match.lastIndex = fromIndex;
+  const result = match.exec(value);
+  return result ? { index: result.index, length: result[0].length } : null;
 }

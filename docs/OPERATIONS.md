@@ -13,9 +13,19 @@
 - Externally retained signed checkpoints and HSM/KMS signing before receipts are treated as
   independently anchored audit evidence.
 
-The JSONL receipt chain survives process restarts on durable storage, but it remains single-writer.
-Run one replica until a consistency-aware sequencing backend exists. A holder of the software
-signing key can rewrite unanchored history, so retain signed checkpoints outside the gateway.
+The JSONL receipt chain fsyncs every receipt before request handling continues and survives process
+restarts on durable storage, but it remains single-writer. `receiptMaxLogBytes` defaults to 64 MiB.
+At the limit, Egrysa renames the active log with its last sequence and starts a new log with a
+signed chain-head checkpoint; archived segments are not loaded at startup and need an operator
+retention policy. Run one replica until a consistency-aware sequencing backend exists. A holder of
+the software signing key can rewrite unanchored history, so retain signed checkpoints outside the
+gateway.
+
+If the active receipt path is missing or empty while sequence-suffixed archives exist, startup fails
+with an interrupted-rotation error. Do not delete the archives or start the same chain at
+sequence 1. Inspect the newest archive and externally retained checkpoint, then either rename the
+newest archive back to the configured active path or explicitly start a new chain with both a new
+`receiptChainId` and a new empty log path.
 
 ## Container boundary
 
@@ -36,6 +46,48 @@ volume will fail closed on the first receipt append.
 When an environment file generated for host development is reused with a container, pin
 `EGRYSA_CONFIG=/app/config/egrysa.container.json` after `--env-file`; otherwise the host-relative
 receipt path overrides the image default.
+
+## Provider capabilities and disclosed downgrade
+
+`maxRequestBytes` bounds client bodies before JSON parsing. `maxResponseBytes` bounds buffered
+provider responses and defaults to 32 MiB; it must be at least 64 KiB. Native SSE is incremental and
+uses a separate 4 MiB per-event assembly bound. Size these limits with the ingress quota, provider
+output-token policy, and process memory limit rather than treating them as rate controls.
+
+Every adapter has a reviewed default profile in `src/provider_capabilities.ts`. A provider config
+may narrow that profile for a locked-down or partial OpenAI-compatible server:
+
+```json
+{
+  "capabilities": {
+    "seed": false,
+    "parallel_tool_calls": false
+  }
+}
+```
+
+Only known boolean keys are accepted, and an override cannot enable a feature the adapter does not
+implement. Unsupported `seed`, `top_p`, frequency/presence penalties, and `parallel_tool_calls` are
+removed from a cloned provider request. The response then carries `x-egrysa-downgraded` with a
+comma-separated list such as `seed,top_p`; absence of the header means no configured capability
+downgrade occurred.
+
+Features that change the response contract are not silently removed. Unsupported tools, required
+tool choice, streaming, stream usage options, temperature, or output-token bounds return a 422
+problem naming the capability before provider contact. Anthropic streaming is supported through a
+buffered OpenAI-SSE emulation and always discloses `stream-emulated`. If usage was requested through
+`stream_options.include_usage`, the emulation emits an OpenAI-shaped usage frame.
+
+## Provider conformance workflow
+
+Run `deno task conformance -- --provider <id>` after configuring and starting a provider. Deno asks
+for network permission to only that provider host and, when needed, access to only its credential
+environment variable. Deterministic wire failures produce a non-zero exit code and a dated JSON
+report under `evals/conformance/`; surrogate fidelity is informational. See
+[Provider conformance](CONFORMANCE.md) for the check definitions and contributor submission steps.
+
+After adding a report, run `deno task conformance:matrix` to regenerate the README support matrix
+from the capability table and committed evidence.
 
 ## Reference local semantic detector
 
@@ -59,7 +111,8 @@ Keep the local provider model allowlist and detector block aligned, then enable 
     "enabled": true,
     "providerId": "local",
     "model": "gpt-oss:20b",
-    "timeoutMs": 2000,
+    "timeoutMs": 10000,
+    "totalTimeoutMs": 30000,
     "maxInputBytes": 16384,
     "onDetectorFailure": "degrade",
     "kinds": ["person_name", "physical_address", "semantic_confidential"]
@@ -72,11 +125,13 @@ Put `person_name` and `physical_address` in `transformKinds`, and `semantic_conf
 findings are deliberately low precision. Even if a future detector emits a low-precision candidate
 for a blocked kind, policy routes it locally instead of allowing it to hard-deny traffic.
 
-`maxInputBytes` is a per-model-call bound. Larger text surfaces are split on whitespace with at
-least 64 bytes of overlap, so size local inference for the number of text surfaces and chunks in a
-request. The measured `gpt-oss:20b` reference run on an Apple M4 Pro had 11.95 seconds p95 added
-latency across short prompts; the default two-second deadline is therefore an alpha safety bound,
-not a universal sizing recommendation. Measure the chosen model and hardware before enabling the
+`maxInputBytes` is a per-model-call bound. Larger text surfaces are split on whitespace with 128
+bytes of overlap. `timeoutMs` is the deadline for each chunk, while `totalTimeoutMs` is the deadline
+for the whole text surface and must be at least `timeoutMs`. Inputs requiring more than
+approximately `totalTimeoutMs / timeoutMs` sequential chunks will degrade even if every chunk meets
+its individual deadline, so size `maxInputBytes` and both budgets together. The measured
+`gpt-oss:20b` reference run on an Apple M4 Pro had 11.95 seconds p95 added latency across short
+prompts; measure the chosen model, hardware, surface count, and chunk count before enabling the
 detector on interactive traffic.
 
 On timeout, connection failure, invalid schema, or a bounded-input/response failure, Egrysa drops
@@ -104,7 +159,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 ```
 
 The inference request receives a request-scoped `__EGRYSA_PERSON_NAME_...__` surrogate, the client
-response is recomposed to `Ada Lovelace`, and the version-3 receipt identifies
+response is recomposed to `Ada Lovelace`, and the version-4 completed-egress receipt identifies
 `egrysa.reference.local-semantic@0.2.0`. Run `deno task eval:semantic` with an enabled config to
 measure the local model without making live recall a release gate.
 

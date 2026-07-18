@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Egrysa Gateway API
-  version: 0.1.0
+  version: 0.1.0-alpha.1
   description: OpenAI-compatible text, streaming, and function-tool AI egress control boundary.
 servers:
   - url: http://127.0.0.1:8787
@@ -56,14 +56,21 @@ paths:
           headers:
             x-egrysa-decision: { schema: { enum: [allow_raw, transform, local_only] } }
             x-egrysa-receipt: { schema: { type: string, format: uuid } }
+            x-egrysa-downgraded:
+              schema: { type: string }
+              description: Comma-separated request fields dropped or emulated under the selected provider capability profile.
           content:
             application/json: { schema: { type: object } }
             text/event-stream: { schema: { type: string } }
+        "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+        "504": { $ref: "#/components/responses/Problem" }
   /v1/receipts/{id}:
     get:
       operationId: getReceipt
@@ -102,7 +109,7 @@ components:
       additionalProperties: false
       required: [model, messages]
       properties:
-        model: { type: string }
+        model: { type: string, minLength: 1, maxLength: 256 }
         messages:
           type: array
           minItems: 1
@@ -172,19 +179,21 @@ components:
         workloadId,
         requestFingerprint,
         decision,
+        provider,
         model,
         findingCounts,
         transformedFields,
         rawContentPersisted,
         providerStoreRequested,
+        previousReceiptHash,
         receiptHash,
         signingKeyId,
         signature,
       ]
       properties:
         version:
-          enum: ["2", "3"]
-          description: Version 3 adds semantic-detector evidence; disabled mode remains version 2.
+          enum: ["2", "3", "4"]
+          description: Version 3 adds semantic-detector evidence; version 4 adds egress outcome for provider invocations.
         id: { type: string, format: uuid }
         chainId: { type: string }
         sequence: { type: integer, minimum: 1 }
@@ -198,7 +207,7 @@ components:
         transformedFields: { type: integer, minimum: 0 }
         detectors:
           type: array
-          description: Detector IDs and versions that ran. Present only in version 3 receipts.
+          description: Detector IDs and versions that ran. Present in version 3 and semantic-enabled version 4 receipts.
           items:
             type: object
             additionalProperties: false
@@ -209,6 +218,9 @@ components:
         detectorDegraded:
           type: boolean
           description: True when semantic detection failed and no semantic findings were used.
+        egress:
+          enum: [completed, failed, started]
+          description: Present and required for version 4. Native streaming receipts attest started egress; buffered emulation records completed upstream egress.
         rawContentPersisted: { const: false }
         providerStoreRequested: { const: false }
         previousReceiptHash: { type: [string, "null"] }

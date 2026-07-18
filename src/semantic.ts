@@ -1,4 +1,5 @@
 import { resolveSemanticDetectorConfig, validateSemanticDetectorConfig } from "./config.ts";
+import { BodySizeLimitError, readBoundedText } from "./bounded.ts";
 import { DetectorImplementationError, type LocalDetector } from "./detectors.ts";
 import type { AppConfig, Finding, ProviderConfig, SemanticFindingKind } from "./types.ts";
 
@@ -19,6 +20,8 @@ When uncertain, omit the candidate. An empty findings array is valid.`;
 const DEFAULT_OVERLAP_BYTES = 128;
 const MAX_RESPONSE_BYTES = 256 * 1024;
 const MAX_TOTAL_INPUT_BYTES = 10 * 1024 * 1024;
+const MAX_OCCURRENCES_PER_CANDIDATE = 64;
+const MAX_SEMANTIC_FINDINGS_PER_SURFACE = 512;
 const encoder = new TextEncoder();
 
 interface Candidate {
@@ -46,6 +49,7 @@ export function createSemanticDetector(config: AppConfig): LocalDetector | null 
     provider,
     settings.model,
     settings.timeoutMs,
+    settings.totalTimeoutMs,
     settings.maxInputBytes,
     new Set(settings.kinds),
   );
@@ -57,7 +61,8 @@ class ReferenceSemanticDetector implements LocalDetector {
   constructor(
     private readonly provider: ProviderConfig,
     private readonly model: string,
-    timeoutMs: number,
+    private readonly chunkTimeoutMs: number,
+    totalTimeoutMs: number,
     private readonly maxInputBytes: number,
     private readonly kinds: ReadonlySet<SemanticFindingKind>,
   ) {
@@ -66,7 +71,7 @@ class ReferenceSemanticDetector implements LocalDetector {
       id: REFERENCE_SEMANTIC_DETECTOR_ID,
       version: REFERENCE_SEMANTIC_DETECTOR_VERSION,
       provenance: "reference",
-      timeoutMs,
+      timeoutMs: totalTimeoutMs,
     };
   }
 
@@ -86,7 +91,12 @@ class ReferenceSemanticDetector implements LocalDetector {
     const findings: Finding[] = [];
     for (const candidate of candidates.values()) {
       let start = text.indexOf(candidate.text);
+      let occurrences = 0;
       while (start !== -1) {
+        if (
+          occurrences >= MAX_OCCURRENCES_PER_CANDIDATE ||
+          findings.length >= MAX_SEMANTIC_FINDINGS_PER_SURFACE
+        ) throw new DetectorImplementationError("oversized_findings");
         findings.push({
           kind: candidate.kind,
           start,
@@ -95,6 +105,7 @@ class ReferenceSemanticDetector implements LocalDetector {
           confidence: candidate.confidence,
           precision: "low",
         });
+        occurrences++;
         start = text.indexOf(candidate.text, start + 1);
       }
     }
@@ -102,27 +113,44 @@ class ReferenceSemanticDetector implements LocalDetector {
   }
 
   async #invoke(text: string, signal: AbortSignal): Promise<unknown> {
-    let response = await detectorFetch(this.provider, this.model, text, signal, true);
-    if ([400, 422].includes(response.status)) {
-      await response.body?.cancel();
-      response = await detectorFetch(this.provider, this.model, text, signal, false);
-    }
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new DetectorImplementationError("endpoint");
-    }
-    const raw = await readBoundedResponse(response);
-    let envelope: unknown;
     try {
-      envelope = JSON.parse(raw);
-    } catch {
-      throw new DetectorImplementationError("schema");
-    }
-    const content = completionContent(envelope);
-    try {
-      return JSON.parse(content);
-    } catch {
-      throw new DetectorImplementationError("schema");
+      const chunkSignal = AbortSignal.any([
+        signal,
+        AbortSignal.timeout(this.chunkTimeoutMs),
+      ]);
+      let response = await detectorFetch(this.provider, this.model, text, chunkSignal, true);
+      if ([400, 422].includes(response.status)) {
+        await response.body?.cancel();
+        response = await detectorFetch(this.provider, this.model, text, chunkSignal, false);
+      }
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new DetectorImplementationError("endpoint");
+      }
+      let raw: string;
+      try {
+        raw = await readBoundedText(response, MAX_RESPONSE_BYTES);
+      } catch (error) {
+        if (error instanceof BodySizeLimitError) {
+          throw new DetectorImplementationError("response_too_large");
+        }
+        throw error;
+      }
+      let envelope: unknown;
+      try {
+        envelope = JSON.parse(raw);
+      } catch {
+        throw new DetectorImplementationError("schema");
+      }
+      const content = completionContent(envelope);
+      try {
+        return JSON.parse(content);
+      } catch {
+        throw new DetectorImplementationError("schema");
+      }
+    } catch (error) {
+      if (isAbortError(error)) throw new DetectorImplementationError("timeout");
+      throw error;
     }
   }
 }
@@ -158,44 +186,11 @@ async function detectorFetch(
       redirect: "error",
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
+    if (isAbortError(error)) {
       throw new DetectorImplementationError("timeout");
     }
     throw new DetectorImplementationError("connection");
   }
-}
-
-async function readBoundedResponse(response: Response): Promise<string> {
-  const declared = Number(response.headers.get("content-length") ?? 0);
-  if (declared > MAX_RESPONSE_BYTES) {
-    await response.body?.cancel();
-    throw new DetectorImplementationError("response_too_large");
-  }
-  if (!response.body) throw new DetectorImplementationError("schema");
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > MAX_RESPONSE_BYTES) {
-        await reader.cancel();
-        throw new DetectorImplementationError("response_too_large");
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(bytes);
 }
 
 function completionContent(value: unknown): string {
@@ -315,4 +310,8 @@ function previousCodePointBoundary(text: string, index: number): number {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name);
 }

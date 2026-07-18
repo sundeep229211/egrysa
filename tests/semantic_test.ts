@@ -86,6 +86,44 @@ Deno.test("reference semantic detector chunks oversized surfaces with byte overl
   });
 });
 
+Deno.test("reference semantic detector enforces timeoutMs for each chunk", async () => {
+  await withServer(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return completion({ findings: [] });
+  }, async (baseUrl) => {
+    const config = enabledConfig(baseUrl);
+    config.semanticDetector!.timeoutMs = 100;
+    config.semanticDetector!.totalTimeoutMs = 1_000;
+    try {
+      await runDetector(createSemanticDetector(config)!, "ordinary text");
+    } catch (error) {
+      if (error instanceof DetectorExecutionError && error.errorClass === "timeout") return;
+      throw error;
+    }
+    throw new Error("slow semantic chunk exceeded its budget without timing out");
+  });
+});
+
+Deno.test("multiple semantic chunks may exceed one chunk budget within the total budget", async () => {
+  let requests = 0;
+  await withServer(async () => {
+    requests++;
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    return completion({ findings: [] });
+  }, async (baseUrl) => {
+    const config = enabledConfig(baseUrl);
+    config.semanticDetector!.maxInputBytes = 256;
+    config.semanticDetector!.timeoutMs = 200;
+    config.semanticDetector!.totalTimeoutMs = 1_500;
+    const text = Array.from({ length: 90 }, (_, index) => `word-${index}`).join(" ");
+    const started = performance.now();
+    await runDetector(createSemanticDetector(config)!, text);
+    if (requests < 2 || performance.now() - started <= config.semanticDetector!.timeoutMs!) {
+      throw new Error("multi-chunk detection still used one combined per-chunk timeout");
+    }
+  });
+});
+
 Deno.test("reference semantic detector retries locally without response_format", async () => {
   let requests = 0;
   await withServer(async (request) => {

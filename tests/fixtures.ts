@@ -4,9 +4,11 @@ export function testConfig(): AppConfig {
   return {
     listen: { hostname: "127.0.0.1", port: 8787 },
     maxRequestBytes: 1024 * 1024,
+    maxResponseBytes: 32 * 1024 * 1024,
     requestTimeoutMs: 5_000,
     receiptCapacity: 100,
     receiptLogPath: ":memory:",
+    receiptMaxLogBytes: 64 * 1024 * 1024,
     receiptChainId: "egrysa-test",
     providers: [
       {
@@ -30,7 +32,8 @@ export function testConfig(): AppConfig {
       enabled: false,
       providerId: "local",
       model: "approved-model",
-      timeoutMs: 2_000,
+      timeoutMs: 10_000,
+      totalTimeoutMs: 30_000,
       maxInputBytes: 16_384,
       onDetectorFailure: "degrade",
       kinds: ["person_name", "physical_address", "semantic_confidential"],

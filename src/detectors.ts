@@ -7,6 +7,7 @@ export type DetectorErrorClass =
   | "schema"
   | "response_too_large"
   | "oversized_input"
+  | "oversized_findings"
   | "contract"
   | "internal";
 

@@ -189,17 +189,84 @@ export function removeOverlaps(findings: Finding[]): Finding[] {
     "physical_address",
     "semantic_confidential",
   ];
-  const sorted = findings.sort((a, b) =>
+  const winner = (a: Finding, b: Finding) =>
     precisionPriority(a) - precisionPriority(b) || a.start - b.start ||
-    priority.indexOf(a.kind) - priority.indexOf(b.kind) || b.end - a.end
+    priority.indexOf(a.kind) - priority.indexOf(b.kind) || b.end - a.end;
+  const sorted = findings.map((finding, index) => ({ finding, index })).toSorted((a, b) =>
+    winner(a.finding, b.finding) || a.index - b.index
   );
-  const kept: Finding[] = [];
-  for (const candidate of sorted) {
-    if (!kept.some((item) => item.start < candidate.end && candidate.start < item.end)) {
-      kept.push(candidate);
+  const starts = [...new Set(findings.map((finding) => finding.start))].toSorted((a, b) => a - b);
+  const acceptedByStart = new Array<Finding | undefined>(starts.length);
+  const acceptedStarts = new FenwickTree(starts.length);
+
+  for (const { finding: candidate } of sorted) {
+    const insertionPoint = lowerBound(starts, candidate.start);
+    const predecessors = acceptedStarts.countBefore(insertionPoint);
+    const acceptedCount = acceptedStarts.countBefore(starts.length);
+    const predecessor = predecessors > 0
+      ? acceptedByStart[acceptedStarts.indexOfOrder(predecessors)]
+      : undefined;
+    const successor = acceptedCount > predecessors
+      ? acceptedByStart[acceptedStarts.indexOfOrder(predecessors + 1)]
+      : undefined;
+    if (predecessor && predecessor.end > candidate.start) continue;
+    if (successor && successor.start < candidate.end) continue;
+
+    acceptedByStart[insertionPoint] = candidate;
+    acceptedStarts.add(insertionPoint);
+  }
+  return acceptedByStart.filter((finding): finding is Finding => finding !== undefined);
+}
+
+class FenwickTree {
+  readonly #tree: Uint32Array;
+
+  constructor(size: number) {
+    this.#tree = new Uint32Array(size + 1);
+  }
+
+  add(index: number): void {
+    for (let cursor = index + 1; cursor < this.#tree.length; cursor += cursor & -cursor) {
+      this.#tree[cursor] = this.#tree[cursor]! + 1;
     }
   }
-  return kept.sort((a, b) => a.start - b.start || b.end - a.end);
+
+  countBefore(end: number): number {
+    let count = 0;
+    for (let cursor = end; cursor > 0; cursor -= cursor & -cursor) {
+      count += this.#tree[cursor]!;
+    }
+    return count;
+  }
+
+  indexOfOrder(order: number): number {
+    let index = 0;
+    for (let step = highestPowerOfTwoBelow(this.#tree.length); step > 0; step >>= 1) {
+      const next = index + step;
+      if (next < this.#tree.length && this.#tree[next]! < order) {
+        index = next;
+        order -= this.#tree[next]!;
+      }
+    }
+    return index;
+  }
+}
+
+function lowerBound(values: number[], target: number): number {
+  let low = 0;
+  let high = values.length;
+  while (low < high) {
+    const middle = low + ((high - low) >> 1);
+    if (values[middle]! < target) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+function highestPowerOfTwoBelow(value: number): number {
+  let power = 1;
+  while (power << 1 < value) power <<= 1;
+  return power;
 }
 
 function precisionPriority(finding: Finding): number {

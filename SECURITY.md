@@ -40,3 +40,7 @@ No version currently receives a production security-support commitment.
 Read `docs/THREAT_MODEL.md` and `docs/OPERATIONS.md`. Production use requires an independent
 security assessment, enterprise identity, durable audited key management, rate limiting, provider
 contract review, and an operating compliance program.
+
+The gateway has no built-in rate limiter. Authenticated workload keys are the resource-exhaustion
+accountability boundary, not a request-rate control. Deploy behind an ingress or API-management rate
+limiter whenever workloads are untrusted or adjacent to untrusted callers.
