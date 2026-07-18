@@ -2,7 +2,7 @@
 
 Date: 2026-07-18
 
-Measured implementation commit: `81996e1582809b94feb6d61dac577108a3f182dd`
+Measured implementation commit: `2fef037f9bc17a18a69eb3dfcd0a3b3bc9297e10`
 
 Runtime: Deno 2.9.3 on Apple Silicon; CI remains pinned to Deno 2.9.2
 
@@ -12,14 +12,14 @@ Suite: `egrysa-synthetic-v2`
 
 | Gate                                          |                                          Result |
 | --------------------------------------------- | ----------------------------------------------: |
-| Unit/integration tests                        |                             74 passed, 0 failed |
+| Unit/integration tests                        |                             76 passed, 0 failed |
 | Black-box compatibility acceptance            |                              2 passed, 0 failed |
 | Expected data-class decisions                 |                                           48/48 |
 | Exact expected finding sets                   |                                           48/48 |
 | Macro detector precision / recall             |                                     1.00 / 1.00 |
 | Negative-case false positives                 |                                               0 |
 | High-severity secret egress                   |                                               0 |
-| Mean classifier plus policy time              |                     0.32 ms in the measured run |
+| Mean classifier plus policy time              |                     0.22 ms in the measured run |
 | Raw prompt persistence by evaluation harness  |                                           false |
 | End-to-end surrogate/recomposition path       |              passed against local HTTP upstream |
 | SSE split-token recomposition                 |                        passed against local SSE |
@@ -46,15 +46,15 @@ The normal `deno task eval` path uses `egrysa.eval.semantic-stub@1.0.0`, a deter
 detector that keeps CI reproducible and exercises semantic policy/evaluation accounting without
 starting a model:
 
-| Offline semantic metric                  |  Result |
-| ---------------------------------------- | ------: |
-| Cases                                    |      18 |
-| Person-name precision / recall           |   1 / 1 |
-| Physical-address precision / recall      |   1 / 1 |
-| Semantic-confidential precision / recall |   1 / 1 |
-| Negative-case false-positive rate        |       0 |
-| p95 added latency                        | 0.09 ms |
-| Detector failures                        |       0 |
+| Offline semantic metric                  |   Result |
+| ---------------------------------------- | -------: |
+| Cases                                    |       18 |
+| Person-name precision / recall           |    1 / 1 |
+| Physical-address precision / recall      |    1 / 1 |
+| Semantic-confidential precision / recall |    1 / 1 |
+| Negative-case false-positive rate        |        0 |
+| p95 added latency                        | 0.065 ms |
+| Detector failures                        |        0 |
 
 A separate live run used the reference detector `egrysa.reference.local-semantic@0.2.0`, Ollama
 `0.32.1`, and the locally installed `gpt-oss:20b` artifact ID `17052f91a42e` on an Apple M4 Pro. The
@@ -79,7 +79,7 @@ unable to hard-deny a request by themselves.
 ## Runtime evidence
 
 The unit/integration suite and synthetic-v2 results were refreshed at commit
-`81996e1582809b94feb6d61dac577108a3f182dd`. The standalone compile, container, vulnerability scan,
+`2fef037f9bc17a18a69eb3dfcd0a3b3bc9297e10`. The standalone compile, container, vulnerability scan,
 SBOM, Kubernetes persistence, Ollama, live-provider, and Calico network-policy observations below
 predate that commit and were not rerun for this measurement.
 

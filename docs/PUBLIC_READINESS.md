@@ -16,7 +16,7 @@ workflows.
 | Area                               | Score | Evidence                                                                                                                            | Main gap                                                                                          |
 | ---------------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | Security boundary                  |  8/10 | Fail-closed taxonomy; strict request field surface; local-only endpoint enforcement; authenticated metrics; keyed receipts          | Deterministic detection remains incomplete; bearer auth and software-held keys are alpha controls |
-| Code and local verification        |  9/10 | Strict TypeScript; 74 tests pass; 48/48 synthetic eval cases; bounded untrusted reads and provider conformance harness              | Implementation-authored corpus; no load or independent adversarial test                           |
+| Code and local verification        |  9/10 | Strict TypeScript; 76 tests pass; 48/48 synthetic eval cases; bounded untrusted reads and provider conformance harness              | Implementation-authored corpus; no load or independent adversarial test                           |
 | Documentation and claim discipline |  9/10 | CISO brief, threat model, architecture, compliance crosswalk, operations, release, support, research, and explicit non-claims       | External reviewer has not yet performed a clean-room install or claim audit                       |
 | Supply chain and release           |  8/10 | Pinned actions; private dry-run build; Debian-vendor high/critical gate passed; 11-component CycloneDX SBOM; advisory triage        | Registry signature, attestation, and provenance await the public tag                              |
 | Open-source governance             |  8/10 | Public GitHub repository, Apache-2.0, protected signed-commit workflow, native security controls, issue forms, and reporting policy | Private reporting needs a non-maintainer workflow test; no external contributor evidence          |
@@ -31,14 +31,14 @@ The score is not a compliance or security rating and should not be quoted as an 
 
 1. Merge the reviewed pre-publication hardening change through protected `main`. Protected
    pull-request checks must pass at the merge head; the locally measured implementation baseline is
-   signed commit `81996e1582809b94feb6d61dac577108a3f182dd`.
+   signed commit `2fef037f9bc17a18a69eb3dfcd0a3b3bc9297e10`.
 2. Verify the private vulnerability reporting workflow from a non-maintainer account.
 3. From protected `main`, verify the tagged workflow's immutable registry digest, vulnerability
    result, CycloneDX SBOM attestation, signature, and provenance before announcing a release.
 
 ## Announce-commit code evidence
 
-- At commit `81996e1582809b94feb6d61dac577108a3f182dd`, formatting, lint, strict type checking, 74
+- At commit `2fef037f9bc17a18a69eb3dfcd0a3b3bc9297e10`, formatting, lint, strict type checking, 76
   tests, and the black-box compatibility paths pass; one opt-in live OpenAI smoke test remains
   intentionally ignored in the local suite.
 - The same commit passes all 48 deterministic synthetic cases, with exact finding and decision
@@ -51,7 +51,7 @@ The score is not a compliance or security rating and should not be quoted as an 
 ## Prior runtime and release evidence
 
 The container, Kubernetes, CI, SBOM, and public-branch evidence below predates commit
-`81996e1582809b94feb6d61dac577108a3f182dd`. It remains historical evidence, not verification of the
+`2fef037f9bc17a18a69eb3dfcd0a3b3bc9297e10`. It remains historical evidence, not verification of the
 announce-commit code.
 
 - The hardened container ran as UID/GID 65532 with a read-only root filesystem, dropped

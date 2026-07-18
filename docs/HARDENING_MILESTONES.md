@@ -9,7 +9,7 @@ later gate cannot compensate for a failed earlier one.
 
 | Required evidence                                                                    | Current state                                                            |
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| Strict format, lint, type, unit/integration, and synthetic evaluation pass           | Commit `81996e1582809b94feb6d61dac577108a3f182dd`: 74 tests; 48/48 cases |
+| Strict format, lint, type, unit/integration, and synthetic evaluation pass           | Commit `2fef037f9bc17a18a69eb3dfcd0a3b3bc9297e10`: 76 tests; 48/48 cases |
 | Policy configuration rejects missing, duplicate, and unknown data classes            | Implemented and tested                                                   |
 | Receipts contain no raw-content digest usable for offline guessing                   | Keyed, nonce-bound fingerprint implemented and tested                    |
 | Process-local receipt chain cannot be deployed as false multi-replica evidence       | Deployment fixed at one replica; limitation documented                   |
