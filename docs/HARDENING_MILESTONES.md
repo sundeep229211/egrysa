@@ -16,7 +16,7 @@ later gate cannot compensate for a failed earlier one.
 | Tagged release cannot bypass tests, audit, image scan, SBOM, provenance, and signing | Private dry run `29397265834` passed; public signing remains pending     |
 | Deployment image is immutable                                                        | Digest placeholder fails closed until the release digest is supplied     |
 | Private vulnerability reporting has a monitored route                                | Enabled; non-maintainer reporting workflow test remains pending          |
-| No repository secret, personal local file, or invalid release identity               | Prior history scans pass; announce diff scan awaits protected CI         |
+| No repository secret, personal local file, or invalid release identity               | Protected PR CI enforces announce-diff and history scans before merge    |
 | Product name has counsel-reviewed knockout                                           | Egrysa selected; founder reports legal screening complete                |
 | At least one real remote-provider generation and one local-provider path pass        | Local gateway path and authorized remote adapter smoke test passed       |
 | Container and Kubernetes examples run under documented restrictions                  | Container and Calico/kind runtime restrictions validated locally         |

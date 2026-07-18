@@ -29,9 +29,9 @@ The score is not a compliance or security rating and should not be quoted as an 
 
 ## Tagged-release blockers
 
-1. Merge the reviewed pre-publication hardening change through protected `main` after fresh public
-   pull-request CI passes. The locally measured implementation baseline is signed commit
-   `81996e1582809b94feb6d61dac577108a3f182dd`.
+1. Merge the reviewed pre-publication hardening change through protected `main`. Protected
+   pull-request checks must pass at the merge head; the locally measured implementation baseline is
+   signed commit `81996e1582809b94feb6d61dac577108a3f182dd`.
 2. Verify the private vulnerability reporting workflow from a non-maintainer account.
 3. From protected `main`, verify the tagged workflow's immutable registry digest, vulnerability
    result, CycloneDX SBOM attestation, signature, and provenance before announcing a release.
