@@ -1,4 +1,5 @@
 import { classify, removeOverlaps } from "../src/classifier.ts";
+import type { Finding, FindingKind } from "../src/types.ts";
 import { testConfig } from "./fixtures.ts";
 
 Deno.test("classifier detects transformable, blocked, and confidential data", async () => {
@@ -63,3 +64,80 @@ Deno.test("deterministic findings win overlaps against semantic candidates", () 
     throw new Error("semantic overlap displaced a deterministic finding");
   }
 });
+
+Deno.test("overlap removal retains candidates exposed by a later winner", () => {
+  const findings = removeOverlaps([
+    finding("semantic_confidential", 0, 20, "low"),
+    finding("semantic_confidential", 2, 10, "low"),
+    finding("email", 18, 30, "high"),
+  ]);
+  const actual = findings.map(({ kind, start, end }) => ({ kind, start, end }));
+  const expected = [
+    { kind: "semantic_confidential", start: 2, end: 10 },
+    { kind: "email", start: 18, end: 30 },
+  ];
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(`unexpected overlap survivors: ${JSON.stringify(actual)}`);
+  }
+});
+
+Deno.test("overlap removal produces a maximal non-overlapping set", () => {
+  const kinds: FindingKind[] = [
+    "email",
+    "phone",
+    "confidential_term",
+    "person_name",
+    "physical_address",
+    "semantic_confidential",
+  ];
+  const precisions: NonNullable<Finding["precision"]>[] = ["high", "medium", "low"];
+  let randomState = 0x5eed1234;
+  const random = () => {
+    randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0;
+    return randomState;
+  };
+
+  for (let setIndex = 0; setIndex < 400; setIndex++) {
+    const candidates = Array.from({ length: 4 + random() % 45 }, () => {
+      const start = random() % 160;
+      return finding(
+        kinds[random() % kinds.length]!,
+        start,
+        start + 1 + random() % 40,
+        precisions[random() % precisions.length]!,
+      );
+    });
+    const kept = removeOverlaps(candidates);
+
+    for (let index = 1; index < kept.length; index++) {
+      if (overlaps(kept[index - 1]!, kept[index]!)) {
+        throw new Error(`kept findings overlap in generated set ${setIndex}`);
+      }
+    }
+    for (const candidate of candidates) {
+      if (!kept.includes(candidate) && !kept.some((accepted) => overlaps(candidate, accepted))) {
+        throw new Error(`dropped finding has no accepted overlap in generated set ${setIndex}`);
+      }
+    }
+  }
+});
+
+function finding(
+  kind: FindingKind,
+  start: number,
+  end: number,
+  precision: NonNullable<Finding["precision"]>,
+): Finding {
+  return {
+    kind,
+    start,
+    end,
+    value: `${kind}-${start}-${end}`,
+    precision,
+    confidence: precision === "high" ? 1 : 0.7,
+  };
+}
+
+function overlaps(left: Finding, right: Finding): boolean {
+  return left.start < right.end && right.start < left.end;
+}

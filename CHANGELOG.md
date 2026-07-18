@@ -27,8 +27,9 @@ public tag.
 ### Changed
 
 - All attacker-influenceable buffered reads now use explicit limits: incremental request/provider
-  body bounds, capped SSE event assembly, bounded semantic occurrence expansion, and linear-sweep
-  overlap resolution.
+  body bounds, capped SSE event assembly, and bounded semantic occurrence expansion.
+- Overlap resolution now applies the original global winner priority with logarithmic
+  predecessor/successor selection, preserving a maximal non-overlapping finding set.
 - Receipt reads are workload-isolated; model IDs are bounded; non-streaming responses receive a
   serialized residue backstop; emulated streams attest completed upstream egress; and transformation
   rejects overlapping findings defensively.
