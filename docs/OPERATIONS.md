@@ -49,6 +49,11 @@ receipt path overrides the image default.
 
 ## Provider capabilities and disclosed downgrade
 
+`maxRequestBytes` bounds client bodies before JSON parsing. `maxResponseBytes` bounds buffered
+provider responses and defaults to 32 MiB; it must be at least 64 KiB. Native SSE is incremental and
+uses a separate 4 MiB per-event assembly bound. Size these limits with the ingress quota, provider
+output-token policy, and process memory limit rather than treating them as rate controls.
+
 Every adapter has a reviewed default profile in `src/provider_capabilities.ts`. A provider config
 may narrow that profile for a locked-down or partial OpenAI-compatible server:
 

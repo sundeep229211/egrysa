@@ -1,6 +1,6 @@
 # Public-readiness review
 
-Review date: 2026-07-15
+Review date: 2026-07-18
 
 ## Recommendation
 
@@ -16,7 +16,7 @@ workflows.
 | Area                               | Score | Evidence                                                                                                                            | Main gap                                                                                          |
 | ---------------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | Security boundary                  |  8/10 | Fail-closed taxonomy; strict request field surface; local-only endpoint enforcement; authenticated metrics; keyed receipts          | Deterministic detection remains incomplete; bearer auth and software-held keys are alpha controls |
-| Code and local verification        |  8/10 | Strict TypeScript; 24 tests and black-box acceptance pass; 48/48 synthetic eval cases; standalone compilation                       | Implementation-authored corpus; no load or independent adversarial test                           |
+| Code and local verification        |  9/10 | Strict TypeScript; 74 tests pass; 48/48 synthetic eval cases; bounded untrusted reads and provider conformance harness              | Implementation-authored corpus; no load or independent adversarial test                           |
 | Documentation and claim discipline |  9/10 | CISO brief, threat model, architecture, compliance crosswalk, operations, release, support, research, and explicit non-claims       | External reviewer has not yet performed a clean-room install or claim audit                       |
 | Supply chain and release           |  8/10 | Pinned actions; private dry-run build; Debian-vendor high/critical gate passed; 11-component CycloneDX SBOM; advisory triage        | Registry signature, attestation, and provenance await the public tag                              |
 | Open-source governance             |  8/10 | Public GitHub repository, Apache-2.0, protected signed-commit workflow, native security controls, issue forms, and reporting policy | Private reporting needs a non-maintainer workflow test; no external contributor evidence          |
@@ -29,31 +29,30 @@ The score is not a compliance or security rating and should not be quoted as an 
 
 ## Tagged-release blockers
 
-1. Merge the reviewed data-plane change through protected `main`. Fresh public pull-request CI
-   passed at signed implementation commit `7a39efb8006d4f77c2ca15864367eef6e927db3d`.
+1. Merge the reviewed pre-publication hardening change through protected `main` after fresh public
+   pull-request CI passes. The locally measured implementation baseline is signed commit
+   `81996e1582809b94feb6d61dac577108a3f182dd`.
 2. Verify the private vulnerability reporting workflow from a non-maintainer account.
 3. From protected `main`, verify the tagged workflow's immutable registry digest, vulnerability
    result, CycloneDX SBOM attestation, signature, and provenance before announcing a release.
 
-## Current workspace evidence
+## Announce-commit code evidence
 
-- Formatting, lint, strict type checking, 24 tests, the black-box compatibility task, 48/48
-  synthetic cases, and standalone compilation pass.
-- The hardened local image ran as UID/GID 65532 with read-only root, dropped capabilities,
-  no-new-privileges, loopback publication, Ed25519 keys, and a durable receipt volume.
-- Receipt creation, public verification material, signed checkpoints, and exact chain-head
-  continuity passed across a container restart and a Kubernetes pod replacement on a bound PVC.
-- Trivy reported zero current high or critical findings. The 11-component local CycloneDX SBOM has
-  digest `c993e6d3bd3cc445d3530cf2a83c6994d186c8e7584164b334a4254d9caec0b5`.
-- Kubernetes 1.36.1 retained non-root, `fsGroup`, seccomp, read-only-root, no-service-account-token,
-  and dropped-capability controls. This kindnet run did not add new NetworkPolicy enforcement
-  evidence; the earlier Calico evidence remains the relevant enforcement result.
+- At commit `81996e1582809b94feb6d61dac577108a3f182dd`, formatting, lint, strict type checking, 74
+  tests, and the black-box compatibility paths pass; one opt-in live OpenAI smoke test remains
+  intentionally ignored in the local suite.
+- The same commit passes all 48 deterministic synthetic cases, with exact finding and decision
+  accuracy, no false positives, no high-severity egress, and no transformation leakage. Its 18-case
+  offline semantic stub reports perfect per-kind precision/recall and no failures.
+- Chunked request, provider-response, SSE-event, semantic-expansion, cross-workload receipt,
+  response-extension residue, and overlapping-transformation regressions are included in those
+  tests.
 
 ## Prior runtime and release evidence
 
-The container, Kubernetes, CI, SBOM, and public-branch evidence below predates the current
-unreleased streaming, tool, and durable-receipt changes. It remains historical evidence for the
-earlier commit, not verification of the current workspace.
+The container, Kubernetes, CI, SBOM, and public-branch evidence below predates commit
+`81996e1582809b94feb6d61dac577108a3f182dd`. It remains historical evidence, not verification of the
+announce-commit code.
 
 - The hardened container ran as UID/GID 65532 with a read-only root filesystem, dropped
   capabilities, no-new-privileges, and loopback-only host publication.
@@ -72,9 +71,9 @@ earlier commit, not verification of the current workspace.
   verified by GitHub.
 - Signed implementation commit `7a39efb8006d4f77c2ca15864367eef6e927db3d` passed public pull-request
   CI, including formatting, linting, type checks, 24 tests, 48/48 synthetic evaluations, standalone
-  compilation, dependency review, the security baseline, and CodeQL. The current container and
-  Kubernetes runtime evidence is recorded above; registry signature, attestation, and provenance
-  remain tag-only evidence.
+  compilation, dependency review, the security baseline, and CodeQL. Later historical container and
+  Kubernetes runtime evidence is recorded in this section; registry signature, attestation, and
+  provenance remain tag-only evidence.
 - The final documentation-link review returned HTTP 200 for all 17 external links, and the exact
   namespace refresh found no obvious npm, PyPI, Docker Hub repository, or general software-search
   collision. The crates.io check was inconclusive and no legal-clearance claim is made.

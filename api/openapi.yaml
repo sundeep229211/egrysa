@@ -62,8 +62,8 @@ paths:
           content:
             application/json: { schema: { type: object } }
             text/event-stream: { schema: { type: string } }
-        "401": { $ref: "#/components/responses/Problem" }
         "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
