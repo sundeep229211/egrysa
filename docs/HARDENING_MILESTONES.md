@@ -13,15 +13,15 @@ later gate cannot compensate for a failed earlier one.
 | Policy configuration rejects missing, duplicate, and unknown data classes            | Implemented and tested                                                   |
 | Receipts contain no raw-content digest usable for offline guessing                   | Keyed, nonce-bound fingerprint implemented and tested                    |
 | Process-local receipt chain cannot be deployed as false multi-replica evidence       | Deployment fixed at one replica; limitation documented                   |
-| Tagged release cannot bypass tests, audit, image scan, SBOM, provenance, and signing | Private dry run `29397265834` passed; public signing remains pending     |
+| Tagged release cannot bypass tests, audit, image scan, SBOM, provenance, and signing | Historical alpha.1 run passed; retained alpha.2 verification pending     |
 | Deployment image is immutable                                                        | Digest placeholder fails closed until the release digest is supplied     |
-| Private vulnerability reporting has a monitored route                                | Enabled; non-maintainer reporting workflow test remains pending          |
+| Private vulnerability reporting has a monitored route                                | Enabled; non-maintainer test advisory received and closed on 2026-07-17  |
 | No repository secret, personal local file, or invalid release identity               | Protected PR CI enforces announce-diff and history scans before merge    |
 | Product name has counsel-reviewed knockout                                           | Egrysa selected; founder reports legal screening complete                |
 | At least one real remote-provider generation and one local-provider path pass        | Local gateway path and authorized remote adapter smoke test passed       |
 | Container and Kubernetes examples run under documented restrictions                  | Container and Calico/kind runtime restrictions validated locally         |
 
-**Release label:** `v0.1.0-alpha.1`, evaluation-only. No production, certification, anonymity, or
+**Release label:** `v0.1.0-alpha.2`, evaluation-only. No production, certification, anonymity, or
 provider-deletion claim.
 
 ## Gate 1: reproducible community alpha

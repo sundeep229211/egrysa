@@ -4,8 +4,9 @@
 
 Do not open a public issue for a suspected vulnerability. Use **Security → Report a vulnerability**
 in the GitHub repository to create a private security advisory. GitHub private vulnerability
-reporting is enabled. The first tagged release remains blocked until the reporting workflow is
-verified from a non-maintainer account.
+reporting is enabled. The non-maintainer reporting gate was completed on 2026-07-17 through a
+closed, unpublished test advisory submitted by `ksundeep9211`; it contained no vulnerability or
+customer data.
 
 Include only synthetic reproduction data. Do not include customer data, provider keys, client keys,
 prompts, responses, or surrogate maps. If private reporting is unavailable, do not send sensitive
@@ -14,10 +15,10 @@ only that the private reporting channel is unavailable.
 
 ## Supported versions
 
-| Version           | Support                                                       |
-| ----------------- | ------------------------------------------------------------- |
-| Unreleased `main` | Best-effort security fixes; no production SLA                 |
-| `0.1.x-alpha`     | Planned 90-day critical-fix window after first public release |
+| Version           | Support                                                      |
+| ----------------- | ------------------------------------------------------------ |
+| Unreleased `main` | Best-effort security fixes; no production SLA                |
+| `0.1.x-alpha`     | 90-day critical-fix window after the first announced release |
 
 No version currently receives a production security-support commitment.
 
