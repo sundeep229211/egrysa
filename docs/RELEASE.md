@@ -22,8 +22,8 @@ vulnerabilities, generates a CycloneDX SBOM, and retains that SBOM for seven day
 an image, create a release, sign a registry digest, or claim provenance.
 
 The private dry run is staging evidence, not a release substitute. The immutable registry digest,
-Sigstore signature, registry SBOM attestation, and GitHub build provenance are verified only from
-the public tagged workflow.
+Sigstore signature, signed CycloneDX release asset, and GitHub build provenance are verified only
+from the public tagged workflow.
 
 Passing the high/critical gate is not a no-vulnerability claim. Retain the complete SBOM and record
 the disposition of every advisory, including findings whose selected vendor severity is below the
@@ -35,9 +35,9 @@ recheck policy are recorded in [the SBOM advisory triage](SBOM_TRIAGE.md).
 A `v*` tag on `main` triggers verification, builds a local candidate image, blocks on high or
 critical known vulnerabilities, publishes the final image, generates SBOM and SLSA provenance, signs
 the immutable digest with Sigstore/cosign, and creates a GitHub build attestation. The job then
-independently verifies the registry signature, CycloneDX attestation, and GitHub provenance. It
-retains the SBOM, bundles, verification results, image identity, and signed checksums as one
-workflow artifact for attachment to the GitHub release.
+independently verifies the registry signature and GitHub provenance, then keyless-signs and verifies
+the CycloneDX document as a release asset. It retains the SBOM, bundles, verification results, image
+identity, and signed checksums as one workflow artifact for attachment to the GitHub release.
 
 ## Operator verification
 
@@ -56,14 +56,14 @@ cosign verify-blob \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   SHA256SUMS
 sha256sum -c SHA256SUMS
+cosign verify-blob \
+  --bundle sbom.cdx.sigstore.json \
+  --certificate-identity "https://github.com/sundeep229211/egrysa/.github/workflows/release.yml@refs/tags/$TAG" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  sbom.cdx.json
 cosign verify \
   --certificate-identity "https://github.com/sundeep229211/egrysa/.github/workflows/release.yml@refs/tags/$TAG" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  "$IMAGE"
-cosign verify-attestation \
-  --certificate-identity "https://github.com/sundeep229211/egrysa/.github/workflows/release.yml@refs/tags/$TAG" \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --type cyclonedx \
   "$IMAGE"
 gh attestation verify "oci://$IMAGE" \
   --repo sundeep229211/egrysa \
@@ -86,13 +86,13 @@ currently retrievable image attachments match the release identity.
    push protection, and private vulnerability reporting.
 6. Manually dispatch CI on `main`; resolve every native security finding and required check.
 7. Create the next signed alpha tag only after the public controls pass.
-8. Verify the resulting digest, vulnerability scan, SBOM attestation, signature, and provenance
+8. Verify the resulting digest, vulnerability scan, signed SBOM, image signature, and provenance
    before creating or announcing a GitHub release.
 
 If any control cannot be enabled or any scan fails, stop the cutover. Do not weaken a workflow or
 publish a release to work around the failure.
 
-### Cutover status on 2026-07-18
+### Cutover status on 2026-07-19
 
 - Steps 1 through 5 are complete: the repository is public, `main` is protected, signed commits are
   required, and CodeQL, secret scanning, push protection, Dependabot security updates, and private
@@ -108,7 +108,12 @@ publish a release to work around the failure.
 - Pull request #7 merged the announce candidate through protected `main` at verified commit
   `24f13cedb202c75729c09adec0eb45681489adf3`; post-merge CI
   [`29648549050`](https://github.com/sundeep229211/egrysa/actions/runs/29648549050) passed.
-- `v0.1.0-alpha.2` is the next release target. It must pass retained and independent evidence
+- Signed tag `v0.1.0-alpha.2` points to `dca67a5`. Its workflow
+  [`29649397754`](https://github.com/sundeep229211/egrysa/actions/runs/29649397754) proved the image
+  signature and GitHub provenance but failed closed because the provenance referrer displaced the
+  retrievable CycloneDX predicate. No release was created and the tag remains immutable.
+- `v0.1.0-alpha.3` is the next release target. Its CycloneDX document is a separately keyless-signed
+  release asset, avoiding the registry predicate collision. It must pass retained and independent
   verification before a GitHub release is created.
 
 ## Alpha versioning
