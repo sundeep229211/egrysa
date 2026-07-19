@@ -1,10 +1,10 @@
 # Public-readiness review
 
-Review date: 2026-07-18
+Review date: 2026-07-19
 
 ## Recommendation
 
-**Go for a public alpha after the retained `v0.1.0-alpha.2` evidence passes; do not announce before
+**Go for a public alpha after the retained `v0.1.0-alpha.3` evidence passes; do not announce before
 that verification.** The repository is public with protected `main`, required signed commits, native
 security controls, a passing CI baseline, and a completed non-maintainer private-reporting test. The
 signed runtime-readiness commits, container, Kubernetes, and local-provider runtime gates also have
@@ -18,7 +18,7 @@ evidence gate is recorded below rather than hidden by a green historical workflo
 | Security boundary                  |  8/10 | Fail-closed taxonomy; strict request field surface; local-only endpoint enforcement; authenticated metrics; keyed receipts    | Deterministic detection remains incomplete; bearer auth and software-held keys are alpha controls |
 | Code and local verification        |  9/10 | Strict TypeScript; 76 tests pass; 48/48 synthetic eval cases; bounded untrusted reads and provider conformance harness        | Implementation-authored corpus; no load or independent adversarial test                           |
 | Documentation and claim discipline |  9/10 | CISO brief, threat model, architecture, compliance crosswalk, operations, release, support, research, and explicit non-claims | External reviewer has not yet performed a clean-room install or claim audit                       |
-| Supply chain and release           |  8/10 | Pinned actions; alpha.1 tag pipeline; retained/self-verifying alpha.2 evidence workflow; advisory triage                      | Alpha.2 registry signature, SBOM, and provenance await tagged verification                        |
+| Supply chain and release           |  8/10 | Pinned actions; alpha.2 fail-closed verification; signed-SBOM alpha.3 evidence workflow; advisory triage                      | Alpha.3 image signature, SBOM, and provenance await tagged verification                           |
 | Open-source governance             |  8/10 | Public repository, Apache-2.0, protected signed commits, native security controls, issue forms, and tested private reporting  | No external contributor evidence                                                                  |
 | Name and legal                     |  7/10 | Egrysa selected; preliminary screen and exact namespace refresh retained; founder reports external legal screening complete   | Legal work is not reproduced here; the crates.io check was inconclusive                           |
 | Enterprise production              |  4/10 | Hardened single-node baseline, durable signed receipts, and explicit responsibility model                                     | No OIDC, HA sequencing, KMS/HSM, SIEM, pen test, SLO, DR, or certification scope                  |
@@ -33,7 +33,7 @@ The score is not a compliance or security rating and should not be quoted as an 
    `main`; post-merge CI passed at verified commit `24f13cedb202c75729c09adec0eb45681489adf3`.
 2. **Complete:** non-maintainer `ksundeep9211` submitted and closed unpublished test advisory
    `GHSA-q6pq-4327-qpvw` on 2026-07-17.
-3. **Pending:** from protected `main`, verify `v0.1.0-alpha.2`'s immutable registry digest,
+3. **Pending:** from protected `main`, verify `v0.1.0-alpha.3`'s immutable registry digest,
    vulnerability result, retained CycloneDX SBOM, signature, and provenance before announcing.
 
 ## Announce-commit code evidence
@@ -79,7 +79,12 @@ announce-commit code.
   public tag path on commit `e2b25a4`. The job reported a successful scan, image push, Sigstore
   signature, CycloneDX attestation, and GitHub provenance, but the registry/API evidence was no
   longer independently discoverable during the 2026-07-18 announce audit. No GitHub release was
-  created, the tag was not moved, and alpha.2 adds retained verification evidence.
+  created and the tag was not moved.
+- Signed tag `v0.1.0-alpha.2` and workflow
+  [`29649397754`](https://github.com/sundeep229211/egrysa/actions/runs/29649397754) verified the
+  image signature and GitHub provenance for commit `dca67a5`, then failed closed when Cosign could
+  no longer retrieve the CycloneDX predicate after provenance publication. No release was created;
+  alpha.3 signs the SBOM as a separate retained release asset.
 - The final documentation-link review returned HTTP 200 for all 17 external links, and the exact
   namespace refresh found no obvious npm, PyPI, Docker Hub repository, or general software-search
   collision. The crates.io check was inconclusive and no legal-clearance claim is made.

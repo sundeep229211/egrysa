@@ -26,9 +26,9 @@ public tag.
 
 ### Changed
 
-- Tagged release jobs now self-verify the immutable image signature, CycloneDX attestation, and
-  GitHub provenance, then retain signed checksums, verification results, and the underlying evidence
-  bundles for publication with the release.
+- Tagged release jobs now self-verify the immutable image signature, keyless CycloneDX signature,
+  and GitHub provenance, then retain signed checksums, verification results, and the underlying
+  evidence bundles for publication with the release.
 - All attacker-influenceable buffered reads now use explicit limits: incremental request/provider
   body bounds, capped SSE event assembly, and bounded semantic occurrence expansion.
 - Overlap resolution now applies the original global winner priority with logarithmic
